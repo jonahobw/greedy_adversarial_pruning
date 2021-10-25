@@ -190,13 +190,15 @@ class Experiment:
         path_dict["model_type"] = path_dict["experiment"] / model_type
         path_dict["model_dataset"] = path_dict["model_type"] / dataset
 
+        model_folder_name = f"{model_type.lower()}"
+
         if quantize:
             path_dict["model"] = (
                 path_dict["model_dataset"]
                 / f"{model_type.lower()}_{quantize}_quantization"
             )
         elif prune:
-            model_folder_name = f"{model_type.lower()}_{prune}"
+            model_folder_name += f"_{prune}"
             assert finetune_epochs > 0, "Number of finetuning epochs must be provided when pruning"
         if finetune_epochs:
             model_folder_name += f"_{finetune_epochs}_finetune_iterations"
