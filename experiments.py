@@ -146,6 +146,7 @@ class Experiment:
             "Either a path to a trained model must be provided or training parameters must be "
             "provided to train a model from scratch."
         )
+        logger.info(f"Pruning the model saved at {self.model_path}")
 
         self.prune_kwargs['train_kwargs']['epochs'] = self.finetune_epochs
 
@@ -154,7 +155,7 @@ class Experiment:
             model=self.model_type,
             strategy=self.prune_method,
             compression=self.prune_compression,
-            resume=self.model_path,
+            resume=str(self.model_path),
             path=self.paths["model"],
             **self.prune_kwargs,
         )
