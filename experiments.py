@@ -23,7 +23,6 @@ class Experiment:
         quantization=None,
         prune_method=None,
         prune_compression=None,
-        prune_kwargs=None,
         finetune_epochs=None,
         attack_method=None,
         attack_kwargs=None,
@@ -41,7 +40,6 @@ class Experiment:
         :param quantization: the modulus for quantization
         :param prune_method:
         :param prune_compression:
-        :param prune_kwargs:
         :param finetune_epochs: number of training epochs after pruning/quantization
         :param attack_method:
         :param attack_kwargs:
@@ -73,11 +71,9 @@ class Experiment:
         self.attack_method = attack_method
         self.attack_kwargs = attack_kwargs
         self.gpu = gpu
-        if self.gpu is not None:
-            if self.train_kwargs is not None:
-                self.train_kwargs["gpu"] = gpu
-            if self.prune_kwargs is not None and "train_kwargs" in self.prune_kwargs:
-                self.prune_kwargs["gpu"] = gpu
+        if self.gpu in [0,1]:
+            self.train_kwargs["gpu"] = gpu
+            self.prune_kwargs["gpu"] = gpu
         if debug:
             self.train_kwargs['train_kwargs']['epochs'] = 1
         self.email = email
@@ -151,12 +147,7 @@ class Experiment:
             "provided to train a model from scratch."
         )
 
-        prune_args = self.train_kwargs
-        prune_args['train_kwargs']['epochs'] = self.finetune_epochs
-        if self.prune_kwargs is None:
-            self.prune_kwargs = prune_args
-        else:
-            self.prune_kwargs.update(prune_args)
+        self.prune_kwargs['train_kwargs']['epochs'] = self.finetune_epochs
 
         self.prune_exp = PruningExperiment(
             dataset=self.dataset,
