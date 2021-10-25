@@ -1,34 +1,60 @@
-import os
+from pathlib import Path
+from smtplib import SMTPException, SMTP_SSL
+import ssl
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 import logging
 
-logging.getLogger('utils')
+logger = logging.getLogger("utils")
 
-def check_folder_structure(experiment_number, dataset, model_type, quantize, prune, attack):
-    root = os.getcwd()
+EMAIL_SENDER = ""
+EMAIL_RECIEVER = ""
+EMAIL_PW = ""
 
-    path_dict = {
-        'root': root,
-        'datasets': os.path.join(root, 'datasets'),
-        'experiments': os.path.join(root, 'experiments'),
-        'experiment': os.path.join(root, 'experiments', f"experiment_{experiment_number}")
-    }
-    path_dict['dataset'] = os.path.join(path_dict['datasets'], dataset)
-    path_dict['model_type'] = os.path.join(path_dict['experiment'], model_type)
-    path_dict['model_dataset'] = os.path.join(path_dict['model_type'], dataset)
-    if quantize:
-        path_dict['model'] = os.path.join(path_dict['model_dataset'], f"{model_type.lower()}_{quantize}_quantization")
-    elif prune:
-        path_dict['model'] = os.path.join(path_dict['model_dataset'],
-                                          f"{model_type.lower()}_{prune}_pruning")
-    else:
-        path_dict['model'] = os.path.join(path_dict['model_dataset'], model_type.lower())
+def email(content, subject, sender, reciever, pw=None):
+    '''
+    Sends an email from a gmail account.
+    :param content:
+    :param subject:
+    :param sender:
+    :param reciever:
+    :param pw:
+    :return:
+    '''
+    message = MIMEMultipart()
+    message['Subject'] = subject
+    message['From'] = sender
+    message['To'] = reciever
+    message.attach(MIMEText(content, "plain"))
 
-    if attack and 'model' in path_dict:
-        path_dict['attacks'] = os.path.join(path_dict['model'], 'attacks')
-        path_dict['attack'] = os.path.join(path_dict['attacks'], attack)
+    try:
+        context = ssl.create_default_context()
+        with SMTP_SSL(host="smtp.gmail.com", port=465, context=context) as server:
+            server.login(sender, pw)
+            server.sendmail(sender, reciever, message.as_string())
+            server.quit()
+    except SMTPException as e:
+        logger.warning("Error while trying to send email:")
+        logger.info(e)
 
-    for folder_name in path_dict:
-        if not os.path.exists(path_dict[folder_name]):
-            os.mkdir(path_dict[folder_name])
 
-    return path_dict
+def email_callback(args):
+    """
+    Callback function to provide a constant email sender, reciever, and pw.
+    :param sender:
+    :param reciever:
+    :param pw:
+    :return:
+    """
+    globals()
+    EMAIL_SENDER = args['sender']
+    EMAIL_RECIEVER = args['reciever']
+    EMAIL_PW = args['pw']
+
+    def send_email(subject, content=""):
+        email(content=content, subject=subject, sender=EMAIL_SENDER, reciever=EMAIL_RECIEVER, pw=EMAIL_PW)
+
+    return send_email
+
+if __name__ == '__main__':
+    print(f"Testing on module {Path.cwd()}")
