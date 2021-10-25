@@ -1,0 +1,21 @@
+numpy
+matplotlib
+pandas
+tqdm
+certifi
+
+# if on linux, run:
+# conda install -c pytorch torchvision 
+# check to see if cudatoolkit was installed with 'conda list'.  
+# if it was not installed, run:
+# conda install cudatoolkit
+# install the requirements in this file with
+# conda install --file linux-requirements.txt
+
+# to "install" shrinkbench, go to ~/git and run
+# git clone https://github.com/JJGO/shrinkbench.git
+# conda activate aicas
+# conda env config vars set PYTHONPATH="/home/jonah/git:$PYTHONPATH"
+# conda activate aicas
+# you can check that this worked with
+# echo $PYTHONPATH
