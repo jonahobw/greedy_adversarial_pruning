@@ -1,4 +1,7 @@
 datasets/
+experiments/
+
+experiment.json
 
 
 # Byte-compiled / optimized / DLL files

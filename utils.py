@@ -1,3 +1,7 @@
+"""Utility functions including email."""
+
+# pylint: disable=too-many-arguments, invalid-name, too-few-public-methods
+
 from pathlib import Path
 from smtplib import SMTPException, SMTP_SSL
 import ssl
@@ -7,24 +11,75 @@ import logging
 
 logger = logging.getLogger("utils")
 
-EMAIL_SENDER = ""
-EMAIL_RECIEVER = ""
-EMAIL_PW = ""
 
-def email(content, subject, sender, reciever, pw=None):
-    '''
+class Email_sender:
+    """Stores email sender, reciever, and pw."""
+
+    def __init__(
+        self,
+        sender: str = None,
+        reciever: str = None,
+        pw: str = None,
+        send: bool = True,
+    ) -> None:
+        """Store email params."""
+
+        self.sender = sender
+        self.reciever = reciever
+        self.pw = pw
+        self.send = send
+        if "send" is not None:
+            logger.warning("Email settings: send set to %s", send)
+        # dummy function in case an argument is not provided:
+        if None in (sender, reciever, pw):
+            logger.warning(
+                "At least one of email sender, reciever, or pw was not"
+                "specified, will not send any emails."
+            )
+            self.email = lambda subject, content: 0
+        else:
+            self.email = self._email
+
+    def _email(self, subject, content=""):
+        """Send an email."""
+        email(
+            content=content,
+            subject=subject,
+            sender=self.sender,
+            reciever=self.reciever,
+            pw=self.pw,
+            send=self.send,
+        )
+
+
+def email(
+    content: str,
+    subject: str,
+    sender: str,
+    reciever: str,
+    pw: str = None,
+    send: bool = True,
+) -> None:
+    """
     Sends an email from a gmail account.
-    :param content:
-    :param subject:
-    :param sender:
-    :param reciever:
-    :param pw:
-    :return:
-    '''
+
+    :param content: the message inside the email.
+    :param subject: the subject line.
+    :param sender: the sending email address.
+    :param reciever: the destination email address.
+    :param pw: the gmail password for the sending email address.
+    :param send: will only send an email if this is true.
+
+    :return: None
+    """
+
+    if not send:
+        return
+
     message = MIMEMultipart()
-    message['Subject'] = subject
-    message['From'] = sender
-    message['To'] = reciever
+    message["Subject"] = subject
+    message["From"] = sender
+    message["To"] = reciever
     message.attach(MIMEText(content, "plain"))
 
     try:
@@ -34,27 +89,8 @@ def email(content, subject, sender, reciever, pw=None):
             server.sendmail(sender, reciever, message.as_string())
             server.quit()
     except SMTPException as e:
-        logger.warning("Error while trying to send email:")
-        logger.info(e)
+        logger.warning("Error while trying to send email: \n%s", e)
 
 
-def email_callback(args):
-    """
-    Callback function to provide a constant email sender, reciever, and pw.
-    :param sender:
-    :param reciever:
-    :param pw:
-    :return:
-    """
-    globals()
-    EMAIL_SENDER = args['sender']
-    EMAIL_RECIEVER = args['reciever']
-    EMAIL_PW = args['pw']
-
-    def send_email(subject, content=""):
-        email(content=content, subject=subject, sender=EMAIL_SENDER, reciever=EMAIL_RECIEVER, pw=EMAIL_PW)
-
-    return send_email
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     print(f"Testing on module {Path.cwd()}")

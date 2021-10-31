@@ -1,54 +1,71 @@
-from nets import get_hyperparameters
+"""
+Run experiments that train, prune and finetune or quantize, and attack a DNN.
+"""
+
+# pylint: disable=import-error, too-many-instance-attributes, too-many-arguments
+# pylint: disable=too-many-locals, logging-fstring-interpolation, invalid-name
+# pylint: disable=unspecified-encoding
+
 import json
-import utils
-import torchvision
-import ssl
-from shrinkbench.experiment import TrainingExperiment, PruningExperiment
-from nets import best_model
 from pathlib import Path
 import os
 import logging
+from typing import Callable
+from shrinkbench.experiment import TrainingExperiment, PruningExperiment
+from nets import get_hyperparameters, best_model
 
-logger = logging.getLogger('Experiment')
+logger = logging.getLogger("Experiment")
 
 
 class Experiment:
+    """
+    Creates a DNN, trains it on CIFAR10, then prunes and finetunes or quantizes, and attacks it.
+    """
+
     def __init__(
         self,
-        experiment_number,
-        dataset,
-        model_type,
-        model_path=None,
-        best_model_metric="val_acc1",
-        quantization=None,
-        prune_method=None,
-        prune_compression=None,
-        finetune_epochs=None,
-        attack_method=None,
-        attack_kwargs=None,
-        email=None,
-        gpu=None,
-        debug = False,
-        kwargs=None,
+        experiment_number: int,
+        dataset: str,
+        model_type: str,
+        model_path: str = None,
+        best_model_metric: str = "val_acc1",
+        quantization: int = None,
+        prune_method: str = None,
+        prune_compression: int = None,
+        finetune_epochs: int = None,
+        attack_method: str = None,
+        attack_kwargs: dict = None,
+        email: Callable = None,
+        gpu: int = None,
+        debug: int = False,
+        kwargs: dict = None,
     ):
+
+        """
+        Initialize all class variables.
+
+        :param experiment_number: the overall number of the experiment.
+        :param dataset: dataset to train on.
+        :param model_type: architecture of model.
+        :param model_path: optionally provide a path to a pretrained model.  If specified,
+            the training will be skipped as the model is already trained.
+        :param best_model_metric: metric to use to determine which is the best model.
+        :param quantization: the modulus for quantization.
+        :param prune_method: the strategy for the pruning algorithm.
+        :param prune_compression: the desired ratio of parameters in original to pruned model.
+        :param finetune_epochs: number of training epochs after pruning/quantization.
+        :param attack_method: the method for generating adversarial inputs.
+        :param attack_kwargs: arguments to be passed to the attack function.
+        :param email: callback function which has a signature of (subject, message).
+        :param gpu: the number of the gpu to run on.
+        :param debug: whether or not to run in debug mode.  If specified, then
+            should be an integer representing how many training/finetuning epochs to run.
+            Also this will only run one batch for training/validation/fine-tuning, so the
+            experimental results with this option specified are not valid.
+        :param kwargs: additional keyword arguments (currently none).
         """
 
-        :param experiment_number:
-        :param dataset:
-        :param model_type:
-        :param model_path: optionally provide a path to the model
-        :param quantization: the modulus for quantization
-        :param prune_method:
-        :param prune_compression:
-        :param finetune_epochs: number of training epochs after pruning/quantization
-        :param attack_method:
-        :param attack_kwargs:
-        :param gpu:
-        :param debug
-        :param kwargs:
-        """
-
-        self.paths, self.name = self.check_folder_structure(
+        self.paths, self.name = check_folder_structure(
             experiment_number,
             dataset,
             model_type,
@@ -56,13 +73,21 @@ class Experiment:
             prune_method,
             attack_method,
             finetune_epochs,
+            prune_compression,
         )
         self.experiment_number = experiment_number
         self.dataset = dataset
         self.model_type = model_type
         self.model_path = model_path
-        self.train_from_scratch =  True if not self.model_path else False
-        self.train_kwargs, self.prune_kwargs = get_hyperparameters(model_type)
+
+        # a model path may be provided to a pretrained model
+        self.train_from_scratch = bool(self.model_path)
+
+        # the hyperparameters for training/fine-tuning and pruning are dependent on the
+        # model architecture
+        self.train_kwargs, self.prune_kwargs = get_hyperparameters(
+            model_type, debug=debug
+        )
         self.best_model_metric = best_model_metric
         self.quantization = quantization
         self.prune_method = prune_method
@@ -70,20 +95,30 @@ class Experiment:
         self.finetune_epochs = finetune_epochs
         self.attack_method = attack_method
         self.attack_kwargs = attack_kwargs
+
+        # there are 2 GPUs (may be changed for different hardware configurations)
         self.gpu = gpu
-        if self.gpu in [0,1]:
+        if self.gpu in [0, 1]:
             self.train_kwargs["gpu"] = gpu
             self.prune_kwargs["gpu"] = gpu
+
+        self.debug = debug
         if debug:
-            self.train_kwargs['train_kwargs']['epochs'] = 1
+            logger.warning(
+                f"Debug is {debug}.  Results will not be valid with this setting on."
+            )
         self.email = email
 
         for k, v in kwargs.items():
             setattr(self, k, v)
 
         self.params = self.save_variables()
+        self.train_exp = None
+        self.prune_exp = None
 
-    def save_variables(self):
+    def save_variables(self) -> None:
+        """Save experiment parameters to a file in this experiment's folder"""
+
         params_path = self.paths["model"] / "experiment_params.json"
         params = {
             "experiment_number": self.experiment_number,
@@ -95,13 +130,15 @@ class Experiment:
             "prune_method": self.prune_method,
             "prune_compression": self.prune_compression,
             "finetune_epochs": self.finetune_epochs,
-            "attack_method": self.attack_method
+            "attack_method": self.attack_method,
         }
-        with open(params_path, "w") as f:
-            json.dump(params, f, indent=4)
+        with open(params_path, "w") as file:
+            json.dump(params, file, indent=4)
         return params
 
-    def run(self):
+    def run(self) -> None:
+        """Train, prune and finetune or quantize, and attack a DNN."""
+
         self.email(f"Experiment started for {self.name}", json.dumps(self.params))
 
         if self.train_from_scratch:
@@ -114,10 +151,10 @@ class Experiment:
 
         self.email(f"Experiment ended for {self.name}", json.dumps(self.params))
 
-    def train(self):
-        # trains a CNN from scratch
+    def train(self) -> None:
+        """Train a CNN from scratch."""
 
-        assert self.model_path == None, (
+        assert self.model_path is None, (
             "Training is done from scratch, should not be providing a pretrained model"
             "to train again."
         )
@@ -126,104 +163,173 @@ class Experiment:
             model=self.model_type,
             path=self.paths["model"],
             checkpoint_metric=self.best_model_metric,
+            debug=self.debug,
             **self.train_kwargs,
         )
         self.train_exp.run()
 
+        # set the model path to be the path to the best model from training.
         self.model_path = best_model(self.train_exp.path, metric=self.best_model_metric)
         self.email(f"Training for {self.name} completed.")
 
-    def prune(self):
+    def prune(self) -> None:
         """
         Prunes a CNN.
 
         Can either prune an existing CNN from a different experiment (when model_path
         is provided as a class parameter) or can prune a model that was also trained during
         this experiment (model_path not provided).
-        :return:
+        :return: None
         """
-        assert self.model_path != None, (
+
+        assert self.model_path is not None, (
             "Either a path to a trained model must be provided or training parameters must be "
             "provided to train a model from scratch."
         )
         logger.info(f"Pruning the model saved at {self.model_path}")
 
-        self.prune_kwargs['train_kwargs']['epochs'] = self.finetune_epochs
+        self.prune_kwargs["train_kwargs"]["epochs"] = self.finetune_epochs
 
         self.prune_exp = PruningExperiment(
             dataset=self.dataset,
             model=self.model_type,
             strategy=self.prune_method,
             compression=self.prune_compression,
+            checkpoint_metric=self.best_model_metric,
             resume=str(self.model_path),
-            path=self.paths["model"],
+            path=str(self.paths["model"]),
+            debug=self.debug,
             **self.prune_kwargs,
         )
         self.prune_exp.run()
         self.email(f"Pruning for {self.name} completed.")
 
     def quantize(self):
-        pass
+        """Quantize a DNN."""
 
     def attack(self):
-        pass
+        """Attack a DNN."""
 
-    def check_folder_structure(
-        self,
-        experiment_number,
-        dataset,
-        model_type,
-        quantize,
-        prune,
-        attack,
-        finetune_epochs,
-    ):
-        root = Path.cwd()
 
-        path_dict = {
-            "root": root,
-            "datasets": root / "datasets",
-            "experiments": root / "experiments",
-            "experiment": root / "experiments" / f"experiment_{experiment_number}",
-        }
-        path_dict["dataset"] = path_dict["datasets"] / dataset
-        path_dict["model_type"] = path_dict["experiment"] / model_type
-        path_dict["model_dataset"] = path_dict["model_type"] / dataset
+def check_folder_structure(
+    experiment_number: int,
+    dataset: str,
+    model_type: str,
+    quantize: int,
+    prune: str,
+    attack: str,
+    finetune_epochs: int,
+    compression: int,
+) -> (str, dict):
+    """
+    Setup the paths to the dataset and experiment folders to follow the folder schema.
+    For the folder schema, an experiment is defined on 2 levels: on one level, an
+    experiment is defined by a model architecture, and pruning method, # of fine-tuning
+    iterations, and compression ratio or quanization modulus, and experiments can be run
+    for all combinations of the enumerated parameters.  On a high level, an experiment is
+    defined as 1 run of all the experiments on the lower level.  Having multiple of the
+    higher experiments means having duplicate runs of all model architecture,
+    pruning method, # of fine-tuning iterations, and compression ratio or quanization
+    modulus combinations.
 
-        model_folder_name = f"{model_type.lower()}"
+    The folder schema is described below.
 
-        if quantize:
-            path_dict["model"] = (
-                path_dict["model_dataset"]
-                / f"{model_type.lower()}_{quantize}_quantization"
-            )
-        elif prune:
-            model_folder_name += f"_{prune}"
-            assert finetune_epochs > 0, "Number of finetuning epochs must be provided when pruning"
-        if finetune_epochs:
-            model_folder_name += f"_{finetune_epochs}_finetune_iterations"
-            path_dict["model"] = path_dict["model_dataset"] / model_folder_name
-        else:
-            path_dict["model"] = path_dict["model_dataset"] / model_type.lower()
+    aicas/
+        datasets/
+            CIFAR10/
+        experiments/
+            # high level experiment folders
+            experiment1/
+                VGG/
+                    cifar10/
+                    # low level experiment folders
+                        vgg_<pruning_method>_<compression>_<finetuning_iterations>/
+                            shrinkbench folder generated for training/
+                            shrinkbench folder generated for pruning/
+                            attacks/
+                                <attack_method>/
+                                    images/
+                                    attack_results.csv
+                            experiment_params.json
+                        ...
+                ResNet20/
+                GoogLeNet/
+                MobileNet/
+            experiment2/
+                ...
 
-        # see if experiment has been run already:
-        if path_dict["model"].exists():
-            logger.warning(f"Path {path_dict['model']} already exists.")
+    :param experiment_number: the overall number of the experiment.
+    :param dataset: dataset to train on.
+    :param model_type: architecture of model.
+    :param quantize: the modulus for quantization.
+    :param prune_method: the strategy for the pruning algorithm.
+    :param attack: the method for generating adversarial inputs.
+    :param finetune_epochs: number of training epochs after pruning/quantization.
+    :param compression: the desired ratio of parameters in original to pruned model.
 
-        if attack and "model" in path_dict:
-            path_dict["attacks"] = path_dict["model"] / "attacks"
-            path_dict["attack"] = path_dict["attacks"] / attack
+    :return: a tuple (dict, str).  The string is the name of the model folder.
+        The dictionary has keys which are the names of paths and the values are
+        pathlib.Path object.  The keys are:
+        'root': the root directory of the repository
+        'datasets': path to the datasets folder
+        'experiments': path to the folder of all experiments.
+        'experiment': path to the folder of the experiment of which this experiment
+            is a part of.
+        'dataset': path to the folder storing the dataset that the DNN will be trained on.
+        'model_type': path to the subfolder of the experiment folder for this model architecture
+        'model_dataset' path to the subfolder of the 'model_type' folder for this dataset
+        'model': the folder in which all data of this experiment will be saved.
+    """
 
-        for folder_name in path_dict:
-            if not path_dict[folder_name].exists():
-                path_dict[folder_name].mkdir(parents=True, exist_ok=True)
+    root = Path.cwd()
 
-        # set environment variable to be used by shrinkbench
-        os.environ["DATAPATH"] = str(path_dict["datasets"])
+    path_dict = {
+        "root": root,
+        "datasets": root / "datasets",
+        "experiments": root / "experiments",
+        "experiment": root / "experiments" / f"experiment_{experiment_number}",
+    }
+    path_dict["dataset"] = path_dict["datasets"] / dataset
+    path_dict["model_type"] = path_dict["experiment"] / model_type
+    path_dict["model_dataset"] = path_dict["model_type"] / dataset
 
-        return path_dict, model_folder_name
+    # model folder name must be unique for each variation of
+    #   pruning/quantizing/finetuning for a certain model architecture
+    model_folder_name = f"{model_type.lower()}"
+
+    if quantize:
+        path_dict["model"] = (
+            path_dict["model_dataset"] / f"{model_type.lower()}_{quantize}_quantization"
+        )
+    elif prune:
+        model_folder_name += f"_{prune}_{compression}_compression"
+        assert (
+            finetune_epochs > 0
+        ), "Number of finetuning epochs must be provided when pruning"
+    if finetune_epochs:
+        model_folder_name += f"_{finetune_epochs}_finetune_iterations"
+        path_dict["model"] = path_dict["model_dataset"] / model_folder_name
+    else:
+        path_dict["model"] = path_dict["model_dataset"] / model_type.lower()
+
+    # see if experiment has been run already:
+    if path_dict["model"].exists():
+        logger.warning(f"Path {path_dict['model']} already exists.")
+
+    if attack and "model" in path_dict:
+        path_dict["attacks"] = path_dict["model"] / "attacks"
+        path_dict["attack"] = path_dict["attacks"] / attack
+
+    for folder_name in path_dict.items():
+        if not path_dict[folder_name].exists():
+            path_dict[folder_name].mkdir(parents=True, exist_ok=True)
+
+    # set environment variable to be used by shrinkbench
+    os.environ["DATAPATH"] = str(path_dict["datasets"])
+
+    return path_dict, model_folder_name
 
 
 if __name__ == "__main__":
-    for model_type in ["VGG", "GoogLeNet", "MobileNetV2", "ResNet18"]:
-        a = Experiment(0, "CIFAR10", model_type, prune="full")
+    for architecture in ["VGG", "GoogLeNet", "MobileNetV2", "ResNet18"]:
+        a = Experiment(0, "CIFAR10", architecture, prune_method="full")

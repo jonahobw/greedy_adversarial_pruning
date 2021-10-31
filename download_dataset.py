@@ -1,7 +1,9 @@
-from torchvision import datasets
-from pathlib import Path
+"""Downloads the CIFAR10 dataset to <current working dir>/datasets/CIFAR10"""
 
-download_path = Path.cwd() / 'datasets' / 'CIFAR10'
+from pathlib import Path
+from torchvision import datasets
+
+download_path = Path.cwd() / "datasets" / "CIFAR10"
 
 if not download_path.exists():
     download_path.mkdir(parents=True, exist_ok=True)
