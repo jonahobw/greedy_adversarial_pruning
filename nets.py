@@ -112,18 +112,23 @@ def get_lr_schedule(
     :param num_epochs: the number of epochs used for training.
     :param method: the lr method.
 
-    :return: a function with signature (epochs: int) that returns the learning
-        rate given an epoch.
+    :return: a function with signature (epochs: int) that returns the multiplication factor
+        for the initial learning rate given the epoch
     """
 
     def lr_schedule(epoch: int) -> float:
-        """Given an epoch, get the learning rate."""
+        """
+        Given an epoch, get the multiplication factor for the learning rate.
+
+        Keeps initial lr until halfway done with training, when lr decreases by a factor of 10.
+        Then lr becomes 1/100 of initial lr at 75% of the way done with training.
+        """
         if epoch < num_epochs * 0.5:
-            return intial_rate
+            return 1
         if num_epochs * 0.75 > epoch >= num_epochs * 0.5:
-            return intial_rate / 10
-        return intial_rate / 100
+            return 0.1
+        return 0.01
 
     if method == "fixed":
-        return lambda x: intial_rate
+        return lambda x: 1
     return lr_schedule

@@ -38,6 +38,7 @@ class Experiment:
         email: Callable = None,
         gpu: int = None,
         debug: int = False,
+        save_one_checkpoint: bool=False,
         kwargs: dict = None,
     ):
 
@@ -62,6 +63,8 @@ class Experiment:
             should be an integer representing how many training/finetuning epochs to run.
             Also this will only run one batch for training/validation/fine-tuning, so the
             experimental results with this option specified are not valid.
+        :param save_one_checkpoint: if true, removes all previous checkpoints and only keeps this one.
+            Since each checkpoint may be hundreds of MB, this saves lots of memory.
         :param kwargs: additional keyword arguments (currently none).
         """
 
@@ -95,6 +98,7 @@ class Experiment:
         self.finetune_epochs = finetune_epochs
         self.attack_method = attack_method
         self.attack_kwargs = attack_kwargs
+        self.save_one_checkpoint = save_one_checkpoint
 
         # there are 2 GPUs (may be changed for different hardware configurations)
         self.gpu = gpu
@@ -164,6 +168,7 @@ class Experiment:
             path=self.paths["model"],
             checkpoint_metric=self.best_model_metric,
             debug=self.debug,
+            save_one_checkpoint = self.save_one_checkpoint,
             **self.train_kwargs,
         )
         self.train_exp.run()
@@ -199,6 +204,7 @@ class Experiment:
             resume=str(self.model_path),
             path=str(self.paths["model"]),
             debug=self.debug,
+            save_one_checkpoint=self.save_one_checkpoint,
             **self.prune_kwargs,
         )
         self.prune_exp.run()

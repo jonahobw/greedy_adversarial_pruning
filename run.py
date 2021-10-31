@@ -3,7 +3,7 @@
 # pylint: disable=import-error, unspecified-encoding, invalid-name
 
 from pathlib import Path
-import json
+import yaml
 from experiments import Experiment
 from utils import Email_sender
 
@@ -11,17 +11,14 @@ from utils import Email_sender
 def run_experiments(filename: str = None) -> None:
     """Run the experiments described in the config file."""
 
-    path = Path.cwd() / "experiment.json"
+    path = Path.cwd() / "config.yaml"
     if filename:
         path = Path.cwd() / filename
 
     with open(path, "r") as file:
-        args = json.load(file)
+        args = yaml.safe_load(file)
 
-    common_args = {
-        x: args[x]
-        for x in ["gpu", "best_model_metric", "experiment_number", "dataset", "debug"]
-    }
+    common_args = args['common_args']
 
     # dummy email function in case no email is provided
     email_fn = lambda x, y: 0

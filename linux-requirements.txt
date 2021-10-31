@@ -3,6 +3,7 @@ matplotlib
 pandas
 tqdm
 certifi
+pyyaml
 
 # if on linux, run:
 # conda install -c pytorch torchvision 
@@ -14,8 +15,8 @@ certifi
 
 # to "install" shrinkbench, go to ~/git and run
 # git clone https://github.com/JJGO/shrinkbench.git
-# conda activate aicas
-# conda env config vars set PYTHONPATH="/home/jonah/git:$PYTHONPATH"
-# conda activate aicas
+# conda activate <environment_name>
+# conda env config vars set PYTHONPATH="<path to parent folder of shrinkbench>"
+# conda activate <environment_name>
 # you can check that this worked with
 # echo $PYTHONPATH
