@@ -81,7 +81,7 @@ class Experiment:
         self.model_path = model_path
 
         # a model path may be provided to a pretrained model
-        self.train_from_scratch = bool(self.model_path)
+        self.train_from_scratch = not bool(self.model_path)
 
         # the hyperparameters for training/fine-tuning and pruning are dependent on the
         # model architecture
@@ -170,7 +170,7 @@ class Experiment:
 
         # set the model path to be the path to the best model from training.
         self.model_path = best_model(self.train_exp.path, metric=self.best_model_metric)
-        self.email(f"Training for {self.name} completed.")
+        self.email(f"Training for {self.name} completed.", "")
 
     def prune(self) -> None:
         """
@@ -202,7 +202,7 @@ class Experiment:
             **self.prune_kwargs,
         )
         self.prune_exp.run()
-        self.email(f"Pruning for {self.name} completed.")
+        self.email(f"Pruning for {self.name} completed.", "")
 
     def quantize(self):
         """Quantize a DNN."""
@@ -320,7 +320,7 @@ def check_folder_structure(
         path_dict["attacks"] = path_dict["model"] / "attacks"
         path_dict["attack"] = path_dict["attacks"] / attack
 
-    for folder_name in path_dict.items():
+    for folder_name in path_dict.keys():
         if not path_dict[folder_name].exists():
             path_dict[folder_name].mkdir(parents=True, exist_ok=True)
 

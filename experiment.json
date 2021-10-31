@@ -12,7 +12,7 @@
   "debug": 2,
   "experiments": [
     {
-      "model_type": "vgg_bn_drop",
+      "model_type": "resnet20",
       "model_path": null,
       "quantization": null,
       "prune_method": "RandomPruning",

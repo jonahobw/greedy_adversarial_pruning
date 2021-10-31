@@ -76,7 +76,7 @@ def get_hyperparameters(
             "num_workers": num_workers,
         },
         "save_freq": 1000,
-        "early_stop": None,
+        "early_stop_method": None,
     }
 
     train_kwargs = {
