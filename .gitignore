@@ -1,7 +1,7 @@
 datasets/
 experiments/
 
-experiment.json
+email_pw.txt
 
 
 # Byte-compiled / optimized / DLL files

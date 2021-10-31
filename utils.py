@@ -26,7 +26,7 @@ class Email_sender:
 
         self.sender = sender
         self.reciever = reciever
-        self.pw = pw
+        self.pw = self.retrieve_pw(pw)
         self.send = send
         if "send" is not None:
             logger.warning("Email settings: send set to %s", send)
@@ -39,6 +39,15 @@ class Email_sender:
             self.email = lambda subject, content: 0
         else:
             self.email = self._email
+
+    def retrieve_pw(self, file: str=None) -> str:
+        """Retrieves the gmail password from a file."""
+
+        if file is None:
+            return None
+        with open(Path()/file, 'r') as pw_file:
+            pw = pw_file.read()
+        return pw
 
     def _email(self, subject, content=""):
         """Send an email."""

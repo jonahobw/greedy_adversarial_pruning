@@ -1,0 +1,26 @@
+{
+  "email": {
+    "sender": "kundu.lab.keb310@gmail.com",
+    "pw": "email_pw.txt",
+    "reciever": "jobrienweiss@umass.edu",
+    "send": false
+  },
+  "experiment_number": 0,
+  "dataset": "CIFAR10",
+  "gpu": null,
+  "best_model_metric": "val_acc1",
+  "debug": 2,
+  "experiments": [
+    {
+      "model_type": "vgg_bn_drop",
+      "model_path": null,
+      "quantization": null,
+      "prune_method": "RandomPruning",
+      "attack_method": null,
+      "prune_compression": 2,
+      "finetune_epochs": 1,
+      "kwargs": {
+      }
+    }
+  ]
+}
