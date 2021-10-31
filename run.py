@@ -26,7 +26,7 @@ def run_experiments(filename: str = None) -> None:
     # dummy email function in case no email is provided
     email_fn = lambda x, y: 0
     if "email" in args:
-        email_fn = Email_sender(args["email"]).email
+        email_fn = Email_sender(**args["email"]).email
     for experiment_args in args["experiments"]:
         experiment_args["email"] = email_fn
         experiment_args.update(common_args)
