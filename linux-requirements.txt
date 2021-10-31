@@ -4,6 +4,7 @@ pandas
 tqdm
 certifi
 pyyaml
+scipy
 
 # if on linux, run:
 # conda install -c pytorch torchvision 

@@ -4,15 +4,21 @@ email:
   pw: email_pw.txt
   reciever: jobrienweiss@umass.edu
   send: false
+# these are arguments which will be applied to each experiment defined in the section below 'experiments'
 common_args:
   experiment_number: 0
   dataset: CIFAR10
   gpu: null
   best_model_metric: val_acc1
-  debug: 10
+  debug: 1
   save_one_checkpoint: true
 experiments:
-- model_type: resnet20
+  # model type is one of {googlenet, mobilenet_v2, resnet20, resnet32,
+  #                       resnet44, resnet56, resnet110, resnet1202,
+  #                       vgg_bn_drop, vgg_bn_drop_100}.
+  #
+  # note that the resnets and vgg_bn_drop are only for CIFAR10, and vgg_bn_drop_100 is only for CIFAR100.
+- model_type: mobilenet_v2
   model_path:
   quantization:
   prune_method: RandomPruning

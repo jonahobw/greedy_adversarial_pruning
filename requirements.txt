@@ -6,3 +6,7 @@ torchvision
 tqdm
 certifi
 pyyaml
+scipy
+
+# install all of these with
+# pip install -r requirements.txt
