@@ -3,15 +3,16 @@ email:
   sender: kundu.lab.keb310@gmail.com
   pw: email_pw.txt
   reciever: jobrienweiss@umass.edu
-  send: false
+  send: true
 # these are arguments which will be applied to each experiment defined in the section below 'experiments'
 common_args:
   experiment_number: 0
   dataset: CIFAR10
-  gpu: null
+  gpu: 0
   best_model_metric: val_acc1
-  debug: 1
+  debug: null
   save_one_checkpoint: true
+  kwargs: {}
 experiments:
   # model type is one of {googlenet, mobilenet_v2, resnet20, resnet32,
   #                       resnet44, resnet56, resnet110, resnet1202,
@@ -19,10 +20,111 @@ experiments:
   #
   # note that the resnets and vgg_bn_drop are only for CIFAR10, and vgg_bn_drop_100 is only for CIFAR100.
 - model_type: mobilenet_v2
-  model_path:
-  quantization:
+  # one of {RandomPruning, GlobalMagWeight, LayerMagWeight, GlobalMagGrad, LayerMagGrad, GlobalMagAct,
+  #         LayerMagAct}
   prune_method: RandomPruning
-  attack_method:
   prune_compression: 2
-  finetune_epochs: 1
-  kwargs: {}
+  finetune_epochs: 40
+
+- model_type: googlenet
+  prune_method: RandomPruning
+  prune_compression: 2
+  finetune_epochs: 40
+
+- model_type: resnet20
+  prune_method: RandomPruning
+  prune_compression: 2
+  finetune_epochs: 40
+
+- model_type: vgg_bn_drop
+  prune_method: RandomPruning
+  prune_compression: 2
+  finetune_epochs: 40
+
+# -------------------------------------------------------------------------
+
+- model_type: mobilenet_v2
+  prune_method: GlobalMagWeight
+  prune_compression: 2
+  finetune_epochs: 40
+
+- model_type: googlenet
+  prune_method: GlobalMagWeight
+  prune_compression: 2
+  finetune_epochs: 40
+
+- model_type: resnet20
+  prune_method: GlobalMagWeight
+  prune_compression: 2
+  finetune_epochs: 40
+
+- model_type: vgg_bn_drop
+  prune_method: GlobalMagWeight
+  prune_compression: 2
+  finetune_epochs: 40
+
+# -------------------------------------------------------------------------
+
+- model_type: mobilenet_v2
+  prune_method: LayerMagWeight
+  prune_compression: 2
+  finetune_epochs: 40
+
+- model_type: googlenet
+  prune_method: LayerMagWeight
+  prune_compression: 2
+  finetune_epochs: 40
+
+- model_type: resnet20
+  prune_method: LayerMagWeight
+  prune_compression: 2
+  finetune_epochs: 40
+
+- model_type: vgg_bn_drop
+  prune_method: LayerMagWeight
+  prune_compression: 2
+  finetune_epochs: 40
+
+# -------------------------------------------------------------------------
+
+- model_type: mobilenet_v2
+  prune_method: GlobalMagGrad
+  prune_compression: 2
+  finetune_epochs: 40
+
+- model_type: googlenet
+  prune_method: GlobalMagGrad
+  prune_compression: 2
+  finetune_epochs: 40
+
+- model_type: resnet20
+  prune_method: GlobalMagGrad
+  prune_compression: 2
+  finetune_epochs: 40
+
+- model_type: vgg_bn_drop
+  prune_method: GlobalMagGrad
+  prune_compression: 2
+  finetune_epochs: 40
+
+# -------------------------------------------------------------------------
+
+- model_type: mobilenet_v2
+  prune_method: LayerMagGrad
+  prune_compression: 2
+  finetune_epochs: 40
+
+- model_type: googlenet
+  prune_method: LayerMagGrad
+  prune_compression: 2
+  finetune_epochs: 40
+
+- model_type: resnet20
+  prune_method: LayerMagGrad
+  prune_compression: 2
+  finetune_epochs: 40
+
+- model_type: vgg_bn_drop
+  prune_method: LayerMagGrad
+  prune_compression: 2
+  finetune_epochs: 40
