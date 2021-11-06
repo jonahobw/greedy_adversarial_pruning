@@ -12,7 +12,7 @@ import logging
 logger = logging.getLogger("utils")
 
 
-class Email_sender:
+class Email_Sender:
     """Stores email sender, reciever, and pw."""
 
     def __init__(
@@ -21,6 +21,7 @@ class Email_sender:
         reciever: str = None,
         pw: str = None,
         send: bool = True,
+        **kwargs
     ) -> None:
         """Store email params."""
 
@@ -28,8 +29,8 @@ class Email_sender:
         self.reciever = reciever
         self.pw = self.retrieve_pw(pw)
         self.send = send
-        if "send" is not None:
-            logger.warning("Email settings: send set to %s", send)
+        if self.send is not None:
+            logger.info("Email settings: send set to %s", send)
         # dummy function in case an argument is not provided:
         if None in (sender, reciever, pw):
             logger.warning(
@@ -100,6 +101,78 @@ def email(
     except SMTPException as e:
         logger.warning("Error while trying to send email: \n%s", e)
 
+def timer(time_in_s):
+    hours, rem = divmod(time_in_s, 3600)
+    minutes, seconds = divmod(rem, 60)
+    return "{:0>2}:{:0>2}:{:0>2}".format(int(hours),int(minutes),int(seconds))
+
+
+def generate_permutations(list_args: dict) -> list:
+    """
+    Given several parameters values which each can take multiple values, return all permutations
+    of the parameters.
+
+    example input:
+    {
+        "model_type": ["vgg_bn_drop", "resnet20"],
+        "prune_method": ["RandomPruning", "GlobalMagWeight"]
+    }
+
+    example output:
+    [
+        {
+            "model_type": "vgg_bn_drop",
+            "prune_method": "RandomPruning",
+        },
+        {
+            "model_type": "vgg_bn_drop",
+            "prune_method": "GlobalMagWeight",
+        },
+        {
+            "model_type": "resnet20",
+            "prune_method": "RandomPruning",
+        },
+        {
+            "model_type": "resnet20",
+            "prune_method": "GlobalMagWeight",
+        }
+    ]
+
+    :param list_args: a dictionary of the parameters formatted as {"parameter_name": [parameter_values]}.
+
+    :return: a list of dictionaries, where each dictionary is a permutation of the possible
+        parameter combinations.
+    """
+
+    #Todo there is a bug where if the first list has more than 2 elements, multiple copies of the same element
+    # get added.  the base case needs to be fixed.
+
+
+    permutations = []
+
+    while(len(list_args) > 0):
+        parameter, vals = list_args.popitem()     # popitem returns a tuple (key, val)
+        for val in vals:
+            temp = permutations.copy()  # must do this to prevent infinite loop
+            for permutation in temp:
+                if parameter in permutation:
+                    new_permutation = permutation.copy()
+                    new_permutation[parameter] = val
+                    permutations.append(new_permutation)
+                else:
+                    permutation[parameter] = val
+            if len(permutations) == 0:
+                permutations.append({parameter: val})
+    return permutations
+
 
 if __name__ == "__main__":
     print(f"Testing on module {Path.cwd()}")
+    example =     {
+        "model_type": ["vgg_bn_drop"],   #, "resnet20"],
+        #"prune_method": ["RandomPruning"],
+        "finetune_iterations": [10, 20, 40]
+    }
+    a = generate_permutations(example)
+    import json
+    print(json.dumps(a, indent=4))

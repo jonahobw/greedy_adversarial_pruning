@@ -3,23 +3,40 @@ email:
   sender: kundu.lab.keb310@gmail.com
   pw: email_pw.txt
   reciever: jobrienweiss@umass.edu
+  # turn off email sending entirely (if email is not configured and/or for debugging)
   send: true
+  # if true, one email is sent per experiment, with an update as to how many more experiments are left.
+  once_per_experiment: true
+
+
 # these are arguments which will be applied to each experiment defined in the section below 'experiments'
 common_args:
-  experiment_number: 0
+  experiment_number: 4
   dataset: CIFAR10
-  gpu: 0
-  best_model_metric: val_acc1
-  debug: null
+  gpu: null
+  # debug is either null/0 (off) or an integer representing the number of training batches to run.
+  # there will only be 1 epoch of training with <debug> number of batches
+  debug: 1
+  # if false, then each experiment will send an email when it starts and ends.  If
+  # true, then each experiment will additionally send an email when it ends training,
+  # pruning, fine-tuning, quantizing, and/or attacking
+  email_verbose: false
   save_one_checkpoint: true
-  kwargs: {}
+  attack_method: pgd
+  attack_kwargs:
+    eps: 0.031372549  # 8/255
+    eps_iter: 0.0078431  # 2/255
+    # boolean, whether to run attack on training or test set
+    train: true
+
+
 experiments:
   # model type is one of {googlenet, mobilenet_v2, resnet20, resnet32,
   #                       resnet44, resnet56, resnet110, resnet1202,
   #                       vgg_bn_drop, vgg_bn_drop_100}.
   #
   # note that the resnets and vgg_bn_drop are only for CIFAR10, and vgg_bn_drop_100 is only for CIFAR100.
-- model_type: mobilenet_v2
+- model_type: resnet20
   # one of {RandomPruning, GlobalMagWeight, LayerMagWeight, GlobalMagGrad, LayerMagGrad, GlobalMagAct,
   #         LayerMagAct}
   prune_method: RandomPruning

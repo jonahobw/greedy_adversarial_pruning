@@ -11,7 +11,9 @@ from pathlib import Path
 import os
 import logging
 from typing import Callable
-from shrinkbench.experiment import TrainingExperiment, PruningExperiment
+
+import numpy as np
+from shrinkbench.experiment import TrainingExperiment, PruningExperiment, AttackExperiment
 from nets import get_hyperparameters, best_model
 
 logger = logging.getLogger("Experiment")
@@ -28,7 +30,7 @@ class Experiment:
         dataset: str,
         model_type: str,
         model_path: str = None,
-        best_model_metric: str = "val_acc1",
+        best_model_metric: str = None,
         quantization: int = None,
         prune_method: str = None,
         prune_compression: int = None,
@@ -36,10 +38,11 @@ class Experiment:
         attack_method: str = None,
         attack_kwargs: dict = None,
         email: Callable = None,
+        email_verbose: bool=False,
         gpu: int = None,
         debug: int = False,
         save_one_checkpoint: bool=False,
-        kwargs: dict = None,
+        seed: int = 42,
     ):
 
         """
@@ -50,7 +53,8 @@ class Experiment:
         :param model_type: architecture of model.
         :param model_path: optionally provide a path to a pretrained model.  If specified,
             the training will be skipped as the model is already trained.
-        :param best_model_metric: metric to use to determine which is the best model.
+        :param best_model_metric: metric to use to determine which is the best model.  If none, the weights
+            from the last epoch of training/finetuning will be used.
         :param quantization: the modulus for quantization.
         :param prune_method: the strategy for the pruning algorithm.
         :param prune_compression: the desired ratio of parameters in original to pruned model.
@@ -58,14 +62,17 @@ class Experiment:
         :param attack_method: the method for generating adversarial inputs.
         :param attack_kwargs: arguments to be passed to the attack function.
         :param email: callback function which has a signature of (subject, message).
+        :param email_verbose: if true, sends an email at start and end of whole experiment, and end of
+            training, pruning, fine-tuning, quantization, and attack.  If false, then only sends an
+            email at the start and end of each experiment.
         :param gpu: the number of the gpu to run on.
         :param debug: whether or not to run in debug mode.  If specified, then
-            should be an integer representing how many training/finetuning epochs to run.
-            Also this will only run one batch for training/validation/fine-tuning, so the
-            experimental results with this option specified are not valid.
+            should be an integer representing how many batches to run, and will only run 1
+            epoch for training/validation/fine-tuning, so the experimental results with
+            this option specified are not valid.
         :param save_one_checkpoint: if true, removes all previous checkpoints and only keeps this one.
             Since each checkpoint may be hundreds of MB, this saves lots of memory.
-        :param kwargs: additional keyword arguments (currently none).
+        :param seed: seed for random number generator.
         """
 
         self.paths, self.name = check_folder_structure(
@@ -102,58 +109,65 @@ class Experiment:
 
         # there are 2 GPUs (may be changed for different hardware configurations)
         self.gpu = gpu
-        if self.gpu in [0, 1]:
+        if self.gpu is not None:
             self.train_kwargs["gpu"] = gpu
             self.prune_kwargs["gpu"] = gpu
+            self.attack_kwargs["gpu"] = gpu
 
         self.debug = debug
         if debug:
             logger.warning(
                 f"Debug is {debug}.  Results will not be valid with this setting on."
             )
-        self.email = email
-
-        for k, v in kwargs.items():
-            setattr(self, k, v)
-
+        # if no email is provided, set up a dummy function that does nothing.
+        self.email = email if email is not None else lambda x, y: 0
+        self.email_verbose = email_verbose
+        self.seed = seed
         self.params = self.save_variables()
         self.train_exp = None
         self.prune_exp = None
+        self.attack_exp = None
 
     def save_variables(self) -> None:
         """Save experiment parameters to a file in this experiment's folder"""
 
         params_path = self.paths["model"] / "experiment_params.json"
-        params = {
-            "experiment_number": self.experiment_number,
-            "dataset": self.dataset,
-            "model_type": self.model_type,
-            "model_path": str(self.model_path),
-            "best_model_metric": self.best_model_metric,
-            "quantization": self.quantization,
-            "prune_method": self.prune_method,
-            "prune_compression": self.prune_compression,
-            "finetune_epochs": self.finetune_epochs,
-            "attack_method": self.attack_method,
-        }
+        variables = ["name", "experiment_number", "dataset", "model_type", "model_path",
+                     "best_model_metric", "quantization", "prune_method", "prune_compression",
+                     "finetune_epochs", "attack_method", "attack_kwargs", "email_verbose",
+                     "gpu", "debug", "save_one_checkpoint", "seed", "train_from_scratch",
+                     "train_kwargs", "prune_kwargs"]
+        params = {x: getattr(self, x) for x in variables}
+        default = lambda x: "json encode error"
+        params = json.dumps(params, skipkeys=True, indent=4, default=default)
+        # params["train_kwargs"] = json.dumps(self.train_kwargs, skipkeys=True, indent=4, default=default)
+        # params["prune_kwargs"] = json.dumps(self.prune_kwargs, skipkeys=True, indent=4, default=default)
         with open(params_path, "w") as file:
-            json.dump(params, file, indent=4)
+            file.write(params)
         return params
 
     def run(self) -> None:
         """Train, prune and finetune or quantize, and attack a DNN."""
 
-        self.email(f"Experiment started for {self.name}", json.dumps(self.params))
+        self.email(f"Experiment started for {self.name}", self.params)
+
+        attacked = False
 
         if self.train_from_scratch:
             self.train()
+            # if attack is specified, only run after initial training if we aren't pruning/quantizing.
+            if self.attack_method is not None and not self.prune_method and not self.quantization:
+                self.attack()
+                attacked = True
         if self.prune_method:
             self.prune()
         if self.quantization:
             self.quantize()
-        self.attack()
+        # if we are pruning/quantizing, attack runs here when we have the final model we want to attack.
+        if self.attack_method is not None and not attacked:
+            self.attack()
 
-        self.email(f"Experiment ended for {self.name}", json.dumps(self.params))
+        self.email(f"Experiment ended for {self.name}", self.params)
 
     def train(self) -> None:
         """Train a CNN from scratch."""
@@ -169,13 +183,16 @@ class Experiment:
             checkpoint_metric=self.best_model_metric,
             debug=self.debug,
             save_one_checkpoint = self.save_one_checkpoint,
+            seed = self.seed,
             **self.train_kwargs,
         )
         self.train_exp.run()
 
         # set the model path to be the path to the best model from training.
         self.model_path = best_model(self.train_exp.path, metric=self.best_model_metric)
-        self.email(f"Training for {self.name} completed.", "")
+
+        if self.email_verbose:
+            self.email(f"Training for {self.name} completed.", "")
 
     def prune(self) -> None:
         """
@@ -205,16 +222,50 @@ class Experiment:
             path=str(self.paths["model"]),
             debug=self.debug,
             save_one_checkpoint=self.save_one_checkpoint,
+            seed=self.seed,
             **self.prune_kwargs,
         )
         self.prune_exp.run()
-        self.email(f"Pruning for {self.name} completed.", "")
+
+        if self.email_verbose:
+            self.email(f"Pruning for {self.name} completed.", "")
 
     def quantize(self):
         """Quantize a DNN."""
 
     def attack(self):
         """Attack a DNN."""
+
+        default_pgd_args = {"eps": 2 / 255, "eps_iter": 0.001, "nb_iter": 5, "norm": np.inf}
+
+        train = self.attack_kwargs.pop('train')
+        default_pgd_args.update(**self.attack_kwargs)
+
+        assert self.model_path is not None, (
+            "Either a path to a trained model must be provided or training parameters must be "
+            "provided to train a model from scratch."
+        )
+
+        self.attack_exp = AttackExperiment(
+            model_path=self.model_path,
+            model_type=self.model_type,
+            dataset=self.dataset,
+            dl_kwargs=self.train_kwargs['dl_kwargs'],
+            train=train,
+            attack=self.attack_method,
+            attack_params=default_pgd_args,
+            path=self.paths["model"],
+            gpu=self.gpu,
+            seed=self.seed,
+            debug=self.debug,
+        )
+        self.attack_exp.run()
+
+        if self.email_verbose:
+            self.email(
+                f"{self.attack_method} attack on {self.model_type} Concluded.",
+                json.dumps(self.attack_exp.save_variables(), indent=4)
+            )
 
 
 def check_folder_structure(
@@ -252,10 +303,10 @@ def check_folder_structure(
                         vgg_<pruning_method>_<compression>_<finetuning_iterations>/
                             shrinkbench folder generated for training/
                             shrinkbench folder generated for pruning/
-                            attacks/
-                                <attack_method>/
-                                    images/
-                                    attack_results.csv
+                                attacks/
+                                    <attack_method>/
+                                        images/
+                                        train_attack_results-*.json
                             experiment_params.json
                         ...
                 ResNet20/
