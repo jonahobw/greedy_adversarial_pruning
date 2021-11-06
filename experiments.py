@@ -112,7 +112,6 @@ class Experiment:
         if self.gpu is not None:
             self.train_kwargs["gpu"] = gpu
             self.prune_kwargs["gpu"] = gpu
-            self.attack_kwargs["gpu"] = gpu
 
         self.debug = debug
         if debug:
