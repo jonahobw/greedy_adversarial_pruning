@@ -6,6 +6,7 @@ from pathlib import Path
 import yaml
 import time
 import traceback
+import copy
 
 from shrinkbench.util import OnlineStats
 
@@ -50,7 +51,7 @@ def run_experiments(filename: str = None) -> None:
             if not once_per_experiment and email_fn is not None:
                 experiment_args["email"] = email_fn
 
-            experiment_args.update(common_args)
+            experiment_args.update(copy.deepcopy(common_args))
 
             e = Experiment(**experiment_args)
             e.run()
