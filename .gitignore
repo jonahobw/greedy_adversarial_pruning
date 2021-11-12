@@ -2,6 +2,8 @@ datasets/
 experiments/
 
 email_pw.txt
+testing.py
+temp_config.yaml
 
 
 # Byte-compiled / optimized / DLL files

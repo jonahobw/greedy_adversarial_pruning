@@ -16,6 +16,7 @@ import numpy as np
 from shrinkbench.experiment import TrainingExperiment, PruningExperiment, AttackExperiment
 from nets import get_hyperparameters, best_model
 
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("Experiment")
 
 
@@ -26,9 +27,9 @@ class Experiment:
 
     def __init__(
         self,
-        experiment_number: int,
-        dataset: str,
-        model_type: str,
+        experiment_number: int = None,
+        dataset: str = None,
+        model_type: str = None,
         model_path: str = None,
         best_model_metric: str = None,
         quantization: int = None,
@@ -51,8 +52,9 @@ class Experiment:
         :param experiment_number: the overall number of the experiment.
         :param dataset: dataset to train on.
         :param model_type: architecture of model.
-        :param model_path: optionally provide a path to a pretrained model.  If specified,
-            the training will be skipped as the model is already trained.
+        :param model_path: optionally provide a relative path to a pretrained model.  If specified,
+            the training will be skipped as the model is already trained.  Note: this path is
+            relative from the repository root aicas/
         :param best_model_metric: metric to use to determine which is the best model.  If none, the weights
             from the last epoch of training/finetuning will be used.
         :param quantization: the modulus for quantization.
@@ -75,20 +77,32 @@ class Experiment:
         :param seed: seed for random number generator.
         """
 
-        self.paths, self.name = check_folder_structure(
-            experiment_number,
-            dataset,
-            model_type,
-            quantization,
-            prune_method,
-            attack_method,
-            finetune_epochs,
-            prune_compression,
-        )
         self.experiment_number = experiment_number
         self.dataset = dataset
         self.model_type = model_type
         self.model_path = model_path
+        self.best_model_metric = best_model_metric
+        self.quantization = quantization
+        self.prune_method = prune_method
+        self.prune_compression = prune_compression
+        self.finetune_epochs = finetune_epochs
+        self.attack_method = attack_method
+        self.attack_kwargs = attack_kwargs
+        self.save_one_checkpoint = save_one_checkpoint
+        self.seed = seed
+
+        if self.model_path:
+            #home = str(Path.cwd())
+            #b = Path(home + model_path)
+            b = Path.cwd() / Path(model_path)
+            self.model_path = b
+            if os.name != "nt":
+                self.model_path = b.as_posix()
+            logger.info(f"Provided model path: {self.model_path}")
+            if not self.model_path.exists():
+                raise FileNotFoundError(f"Model path {model_path} not found.")
+
+        self.paths, self.name = self.generate_paths()
 
         # a model path may be provided to a pretrained model
         self.train_from_scratch = not bool(self.model_path)
@@ -98,16 +112,7 @@ class Experiment:
         self.train_kwargs, self.prune_kwargs = get_hyperparameters(
             model_type, debug=debug
         )
-        self.best_model_metric = best_model_metric
-        self.quantization = quantization
-        self.prune_method = prune_method
-        self.prune_compression = prune_compression
-        self.finetune_epochs = finetune_epochs
-        self.attack_method = attack_method
-        self.attack_kwargs = attack_kwargs
-        self.save_one_checkpoint = save_one_checkpoint
 
-        # there are 2 GPUs (may be changed for different hardware configurations)
         self.gpu = gpu
         if self.gpu is not None:
             self.train_kwargs["gpu"] = gpu
@@ -121,11 +126,130 @@ class Experiment:
         # if no email is provided, set up a dummy function that does nothing.
         self.email = email if email is not None else lambda x, y: 0
         self.email_verbose = email_verbose
-        self.seed = seed
         self.params = self.save_variables()
         self.train_exp = None
         self.prune_exp = None
         self.attack_exp = None
+
+    def generate_paths(self):
+        """
+        Setup the paths to the experiment folders.
+
+        Calls check_folder_structure() to generate paths.  If a model_path is provided, meaning
+        that a model has already been trained, then will find the existing paths instead of creating them.
+
+        :raises ValueError if a model path is provided, and any of the provided experiment_number, dataset,
+            model_type, quantization, prune_method, attack_method, finetune_epochs, or prune_compression
+            does not match the ones found using the model_path.
+        :returns a tuple (str, dict) from check_folder_strucuture.
+        """
+
+        if self.model_path:
+            m_path = str(self.model_path)
+            sep = '\\' if '\\' in m_path else '/'
+
+            if self.experiment_number:
+                if f"experiment_{self.experiment_number}" not in m_path:
+                    raise ValueError(f"Provided experiment number {self.experiment_number} but provided model path"
+                                     f"\n{model_path} does not include this experiment number.")
+            else:
+                self.experiment_number = int(m_path[m_path.find("experiment_"):].split("_")[1])
+
+            if self.model_type:
+                if self.model_type not in m_path:
+                    raise ValueError(f"Provided model type {self.model_type} but provided model path"
+                                     f"\n{model_path} does not include this model_type.")
+            else:
+                self.model_type = m_path[m_path.find(f"experiment_{self.experiment_number}"):].split(sep)[1]
+
+            if self.dataset:
+                if self.dataset not in m_path:
+                    raise ValueError(f"Provided dataset {self.dataset} but provided model path"
+                                     f"\n{model_path} does not include this dataset.")
+            else:
+                self.dataset =  m_path[m_path.find(self.model_type):].split(sep)[1]
+
+            if self.quantization:
+                # only throw an error if there is a different quantization already applied.
+                if "quantization" in m_path:
+                    if f"{self.quantization}_quantization" not in m_path:
+                        raise ValueError(f"Provided quantization {self.quantization} but provided model path"
+                                         f"\n{model_path} does not include this quantization.")
+            else:
+                loc = m_path.find("quantization")
+                if loc >= 0:
+                    self.quantization = int(m_path[:loc].split("_")[-2])
+                else:
+                    self.quantization = None
+
+            # indicates whether or not the model from model_path is already pruned.
+            already_pruned = False
+
+            if self.prune_compression:
+                # only throw an error if there is a different compression already applied.
+                if "compression" in m_path:
+                    if f"{self.prune_compression}_compression" not in m_path:
+                        raise ValueError(f"Provided pruning compression {self.prune_compression} but provided model path"
+                                         f"\n{model_path} does not include this prune compression.")
+                    else:
+                        already_pruned = True
+            else:
+                loc = m_path.find("compression")
+                if loc >= 0:
+                    self.prune_compression = int(m_path[:loc].split("_")[-2])
+                else:
+                    self.prune_compression = None
+
+            if self.prune_method:
+                # only throw an error if there is a different pruning already applied
+                #   (checked using already_pruned variable)
+                if self.prune_method not in m_path and already_pruned:
+                    raise ValueError(f"Provided pruning method {self.prune_method} but provided model path"
+                                     f"\n{model_path} does not include this pruning method.")
+            else:
+                if self.prune_compression:
+                    self.prune_method = m_path[:m_path.find(f"{self.prune_compression}_compression")].split("_")[-2]
+                else:
+                    self.prune_method = None
+
+            if self.finetune_epochs:
+                # only throw an error if there is a different finetuning already applied
+                #   (checked using already_pruned variable)
+                if f"{self.finetune_epochs}_finetune_iterations" not in m_path and already_pruned:
+                    raise ValueError(f"Provided finetune epochs {self.finetune_epochs} but provided model path"
+                                     f"\n{model_path} does not include this finetune_epochs.")
+            else:
+                if self.prune_method:
+                    self.finetune_epochs = int(m_path[:m_path.find("finetune")].split("_")[-2])
+                else:
+                    self.finetune_epochs = None
+
+            if self.quantization:
+                # only throw an error if there is a different quantization already applied
+                if "quantization" in m_path:
+                    if f"{self.quantization}_quantization" not in m_path:
+                        raise ValueError(f"Provided quantization {self.quantization} but provided model path"
+                                         f"\n{model_path} does not include this quantization.")
+            else:
+                loc = m_path.find("quantization")
+                if loc >= 0:
+                    self.quantization = int(m_path[:loc].split("_")[-2])
+                else:
+                    self.quantization = None
+
+        return check_folder_structure(
+                    self.experiment_number,
+                    self.dataset,
+                    self.model_type,
+                    self.quantization,
+                    self.prune_method,
+                    self.attack_method,
+                    self.finetune_epochs,
+                    self.prune_compression,
+                )
+
+
+
 
     def save_variables(self) -> None:
         """Save experiment parameters to a file in this experiment's folder"""
@@ -226,6 +350,9 @@ class Experiment:
         )
         self.prune_exp.run()
 
+        # set the model path to be the path to the best model from training.
+        self.model_path = best_model(self.prune_exp.path, metric=self.best_model_metric)
+
         if self.email_verbose:
             self.email(f"Pruning for {self.name} completed.", "")
 
@@ -235,10 +362,11 @@ class Experiment:
     def attack(self):
         """Attack a DNN."""
 
-        default_pgd_args = {"eps": 2 / 255, "eps_iter": 0.001, "nb_iter": 5, "norm": np.inf}
+        default_pgd_args = {"eps": 2 / 255, "eps_iter": 0.001, "nb_iter": 10, "norm": np.inf}
 
         train = self.attack_kwargs.pop('train')
         default_pgd_args.update(**self.attack_kwargs)
+        logger.info(f"Attacking with parameters:\n{json.dumps(default_pgd_args, indent=4)}")
 
         assert self.model_path is not None, (
             "Either a path to a trained model must be provided or training parameters must be "
@@ -298,7 +426,7 @@ def check_folder_structure(
             experiment1/
                 VGG/
                     cifar10/
-                    # low level experiment folders
+                    # low level experiment folders (model folders)
                         vgg_<pruning_method>_<compression>_<finetuning_iterations>/
                             shrinkbench folder generated for training/
                             shrinkbench folder generated for pruning/
@@ -354,19 +482,16 @@ def check_folder_structure(
     model_folder_name = f"{model_type.lower()}"
 
     if quantize:
-        path_dict["model"] = (
-            path_dict["model_dataset"] / f"{model_type.lower()}_{quantize}_quantization"
-        )
+        model_folder_name += f"_{quantize}_quantization"
     elif prune:
         model_folder_name += f"_{prune}_{compression}_compression"
         assert (
-            finetune_epochs > 0
+            finetune_epochs >= 0
         ), "Number of finetuning epochs must be provided when pruning"
     if finetune_epochs:
         model_folder_name += f"_{finetune_epochs}_finetune_iterations"
-        path_dict["model"] = path_dict["model_dataset"] / model_folder_name
-    else:
-        path_dict["model"] = path_dict["model_dataset"] / model_type.lower()
+
+    path_dict["model"] = path_dict["model_dataset"] / model_type.lower()
 
     # see if experiment has been run already:
     if path_dict["model"].exists():

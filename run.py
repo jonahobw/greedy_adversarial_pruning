@@ -156,4 +156,11 @@ def convert_experiment_list(args):
     return permutations
 
 if __name__ == "__main__":
-    run_experiments()
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-file', required=False,
+                        default='config.yaml', help='.yaml file with configuration')
+
+    args = parser.parse_args()
+    run_experiments(args.file)
