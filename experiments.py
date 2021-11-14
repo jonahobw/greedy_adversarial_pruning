@@ -44,6 +44,7 @@ class Experiment:
         debug: int = False,
         save_one_checkpoint: bool=False,
         seed: int = 42,
+        train_kwargs: {} = None,
     ):
 
         """
@@ -75,6 +76,8 @@ class Experiment:
         :param save_one_checkpoint: if true, removes all previous checkpoints and only keeps this one.
             Since each checkpoint may be hundreds of MB, this saves lots of memory.
         :param seed: seed for random number generator.
+        :param train_kwargs: training parameters to be passed to the train_kwargs parameter from
+            shrinkbench/experiments/train.py TrainingExperiment
         """
 
         self.experiment_number = experiment_number
@@ -112,6 +115,8 @@ class Experiment:
         self.train_kwargs, self.prune_kwargs = get_hyperparameters(
             model_type, debug=debug
         )
+        if train_kwargs:
+            self.train_kwargs['train_kwargs'].update(train_kwargs)
 
         self.gpu = gpu
         if self.gpu is not None:
