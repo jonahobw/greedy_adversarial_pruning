@@ -7,12 +7,14 @@ import yaml
 import time
 import traceback
 import copy
+import logging
 
 from shrinkbench.util import OnlineStats
 
 from experiments import Experiment
 from experiment_utils import Email_Sender, timer, generate_permutations
 
+logger = logging.getLogger('run')
 
 def run_experiments(filename: str = None) -> None:
     """Run the experiments described in the config file."""
@@ -20,6 +22,8 @@ def run_experiments(filename: str = None) -> None:
     path = Path.cwd() / "config.yaml"
     if filename:
         path = Path.cwd() / filename
+
+    logger.info(f"Reading config file {path}")
 
     with open(path, "r") as file:
         args = yaml.safe_load(file)

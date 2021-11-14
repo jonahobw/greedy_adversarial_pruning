@@ -97,7 +97,7 @@ class Experiment:
             b = Path.cwd() / Path(model_path)
             self.model_path = b
             if os.name != "nt":
-                self.model_path = b.as_posix()
+                self.model_path = Path(b.as_posix())
             logger.info(f"Provided model path: {self.model_path}")
             if not self.model_path.exists():
                 raise FileNotFoundError(f"Model path {model_path} not found.")
@@ -248,9 +248,6 @@ class Experiment:
                     self.prune_compression,
                 )
 
-
-
-
     def save_variables(self) -> None:
         """Save experiment parameters to a file in this experiment's folder"""
 
@@ -346,6 +343,7 @@ class Experiment:
             debug=self.debug,
             save_one_checkpoint=self.save_one_checkpoint,
             seed=self.seed,
+            attack_kwargs=self.attack_kwargs,
             **self.prune_kwargs,
         )
         self.prune_exp.run()
@@ -484,14 +482,16 @@ def check_folder_structure(
     if quantize:
         model_folder_name += f"_{quantize}_quantization"
     elif prune:
+        assert compression is not None and compression > 1, \
+            "When pruning, must provide compression as a number > 1."
         model_folder_name += f"_{prune}_{compression}_compression"
         assert (
-            finetune_epochs >= 0
+            isinstance(finetune_epochs, int) and finetune_epochs >= 0
         ), "Number of finetuning epochs must be provided when pruning"
     if finetune_epochs:
         model_folder_name += f"_{finetune_epochs}_finetune_iterations"
 
-    path_dict["model"] = path_dict["model_dataset"] / model_type.lower()
+    path_dict["model"] = path_dict["model_dataset"] / model_folder_name
 
     # see if experiment has been run already:
     if path_dict["model"].exists():
