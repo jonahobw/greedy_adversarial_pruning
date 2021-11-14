@@ -151,21 +151,21 @@ class Experiment:
             if self.experiment_number:
                 if f"experiment_{self.experiment_number}" not in m_path:
                     raise ValueError(f"Provided experiment number {self.experiment_number} but provided model path"
-                                     f"\n{model_path} does not include this experiment number.")
+                                     f"\n{self.model_path} does not include this experiment number.")
             else:
                 self.experiment_number = int(m_path[m_path.find("experiment_"):].split("_")[1])
 
             if self.model_type:
                 if self.model_type not in m_path:
                     raise ValueError(f"Provided model type {self.model_type} but provided model path"
-                                     f"\n{model_path} does not include this model_type.")
+                                     f"\n{self.model_path} does not include this model_type.")
             else:
                 self.model_type = m_path[m_path.find(f"experiment_{self.experiment_number}"):].split(sep)[1]
 
             if self.dataset:
                 if self.dataset not in m_path:
                     raise ValueError(f"Provided dataset {self.dataset} but provided model path"
-                                     f"\n{model_path} does not include this dataset.")
+                                     f"\n{self.model_path} does not include this dataset.")
             else:
                 self.dataset =  m_path[m_path.find(self.model_type):].split(sep)[1]
 
@@ -174,7 +174,7 @@ class Experiment:
                 if "quantization" in m_path:
                     if f"{self.quantization}_quantization" not in m_path:
                         raise ValueError(f"Provided quantization {self.quantization} but provided model path"
-                                         f"\n{model_path} does not include this quantization.")
+                                         f"\n{self.model_path} does not include this quantization.")
             else:
                 loc = m_path.find("quantization")
                 if loc >= 0:
@@ -190,7 +190,7 @@ class Experiment:
                 if "compression" in m_path:
                     if f"{self.prune_compression}_compression" not in m_path:
                         raise ValueError(f"Provided pruning compression {self.prune_compression} but provided model path"
-                                         f"\n{model_path} does not include this prune compression.")
+                                         f"\n{self.model_path} does not include this prune compression.")
                     else:
                         already_pruned = True
             else:
@@ -205,7 +205,7 @@ class Experiment:
                 #   (checked using already_pruned variable)
                 if self.prune_method not in m_path and already_pruned:
                     raise ValueError(f"Provided pruning method {self.prune_method} but provided model path"
-                                     f"\n{model_path} does not include this pruning method.")
+                                     f"\n{self.model_path} does not include this pruning method.")
             else:
                 if self.prune_compression:
                     self.prune_method = m_path[:m_path.find(f"{self.prune_compression}_compression")].split("_")[-2]
@@ -217,7 +217,7 @@ class Experiment:
                 #   (checked using already_pruned variable)
                 if f"{self.finetune_epochs}_finetune_iterations" not in m_path and already_pruned:
                     raise ValueError(f"Provided finetune epochs {self.finetune_epochs} but provided model path"
-                                     f"\n{model_path} does not include this finetune_epochs.")
+                                     f"\n{self.model_path} does not include this finetune_epochs.")
             else:
                 if self.prune_method:
                     self.finetune_epochs = int(m_path[:m_path.find("finetune")].split("_")[-2])
@@ -229,7 +229,7 @@ class Experiment:
                 if "quantization" in m_path:
                     if f"{self.quantization}_quantization" not in m_path:
                         raise ValueError(f"Provided quantization {self.quantization} but provided model path"
-                                         f"\n{model_path} does not include this quantization.")
+                                         f"\n{self.model_path} does not include this quantization.")
             else:
                 loc = m_path.find("quantization")
                 if loc >= 0:
@@ -299,7 +299,7 @@ class Experiment:
         self.train_exp = TrainingExperiment(
             dataset=self.dataset,
             model=self.model_type,
-            path=self.paths["model"],
+            path=str(self.paths["model"]),
             checkpoint_metric=self.best_model_metric,
             debug=self.debug,
             save_one_checkpoint = self.save_one_checkpoint,
