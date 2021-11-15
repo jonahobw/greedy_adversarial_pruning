@@ -43,7 +43,7 @@ class Experiment:
         gpu: int = None,
         debug: int = False,
         save_one_checkpoint: bool=False,
-        seed: int = 42,
+        seed: int = None,
         train_kwargs: {} = None,
     ):
 
@@ -75,7 +75,7 @@ class Experiment:
             this option specified are not valid.
         :param save_one_checkpoint: if true, removes all previous checkpoints and only keeps this one.
             Since each checkpoint may be hundreds of MB, this saves lots of memory.
-        :param seed: seed for random number generator.
+        :param seed: seed for random number generator.  If provided, behavior will be deterministic.
         :param train_kwargs: training parameters to be passed to the train_kwargs parameter from
             shrinkbench/experiments/train.py TrainingExperiment
         """

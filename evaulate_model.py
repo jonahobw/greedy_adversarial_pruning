@@ -1,13 +1,21 @@
 import copy
 import json
 import pathlib
+import os
+
+import numpy as np
+from tqdm import tqdm
+import torch
 import torchvision.models
-from cleverhans.torch.attacks import projected_gradient_descent
+from cleverhans.torch.attacks.projected_gradient_descent import (
+    projected_gradient_descent,
+)
 
 from shrinkbench.experiment import DNNExperiment
 from shrinkbench import models
 from shrinkbench.models.head import mark_classifier
-from shrinkbench.metrics import model_size, flops, accuracy
+from shrinkbench.metrics import model_size, flops, accuracy, correct
+from shrinkbench.util import OnlineStats
 
 attacks = {'pgd': projected_gradient_descent}
 
@@ -20,13 +28,28 @@ class Model_Evaluator(DNNExperiment):
 
     def __init__(self, model_type, model_path, dataset='CIFAR10', gpu=None, seed=42, dl_kwargs: {} = None):
         super().__init__(seed=seed)
-        self.path = pathlib.Path(path)
+
+        self.fix_seed(seed, deterministic=True)
+
+        # set environment variable to be used by shrinkbench
+        os.environ["DATAPATH"] = str(pathlib.Path.cwd() / 'datasets')
+
+        b = pathlib.Path.cwd() / pathlib.Path(model_path)
+        self.path = b
+        if os.name != "nt":
+            self.path = pathlib.Path(b.as_posix())
+        print(f"Provided model path: {self.path}")
+        if not self.path.exists():
+            raise FileNotFoundError(f"Model path {path} not found.")
+        self.resume = self.path
+
         self.gpu = gpu
         self.dataset=dataset
         self.model_type = model_type
         self.model_path = model_path
-        dl_kwargs = copy.deepcopy(self.dl_kwargs).update(dl_kwargs)
-        self.build_dataloader(dataset=dataset, **dl_kwargs)
+        if dl_kwargs:
+            self.dl_kwargs = self.dl_kwargs.update(dl_kwargs)
+        self.build_dataloader(dataset=dataset, **self.dl_kwargs)
         self.build_model(self.model_type, pretrained=False, resume=self.model_path, dataset=dataset)
         self.to_device()
 
@@ -55,7 +78,8 @@ class Model_Evaluator(DNNExperiment):
         self.flops_nz = ops_nz
         self.theoretical_speedup = ops / ops_nz
 
-    def adv_acc(self, train=True, attack='pgd', attack_kwargs={"eps": 2 / 255, "eps_iter": 0.001, "nb_iter": 10, "norm": np.inf}):
+    def adv_acc(self, train=True, attack_name='pgd', attack_kwargs={"eps": 2 / 255, "eps_iter": 0.001, "nb_iter": 10, "norm": np.inf}):
+
         self.model.eval()
 
         if train:
@@ -65,7 +89,7 @@ class Model_Evaluator(DNNExperiment):
             dl = self.val_dl
             data = "test"
 
-        results = {"inputs_tested": 0}
+        results = {"dataset": data, "inputs_tested": 0}
 
         clean_acc1 = OnlineStats()
         clean_acc5 = OnlineStats()
@@ -73,11 +97,11 @@ class Model_Evaluator(DNNExperiment):
         adv_acc5 = OnlineStats()
 
         epoch_iter = tqdm(dl)
-        epoch_iter.set_description(f"{self.attack_name} on {data} dataset")
+        epoch_iter.set_description(f"{attack_name} on {data} dataset")
 
         for i, (x, y) in enumerate(epoch_iter, start=1):
             x, y = x.to(self.device), y.to(self.device)
-            x_adv = self.attack(self.model, x, **self.attack_params)
+            x_adv = attacks[attack_name](self.model, x, **attack_kwargs)
             y_pred = self.model(x)  # model prediction on clean examples
             y_pred_adv = self.model(x_adv)  # model prediction on adversarial examples
 
@@ -114,15 +138,19 @@ class Model_Evaluator(DNNExperiment):
 
         print(json.dumps(metrics, indent=4))
 
-    def all_results(self):
+    def run(self):
+        print("Getting clean accuracy ...")
         self.clean_acc()
+        print("Getting pruning metrics ...")
         self.prune_metrics()
+        print("Getting adversarial accuracy ...")
         self.adv_acc()
         self.print_results()
 
+
 if __name__ == '__main__':
-    path = ''
-    model_type = ''
-    gpu = None
+    path = 'experiments/experiment_12/googlenet/CIFAR10/googlenet_GreedyPGDGlobalMagGrad_2_compression_5_finetune_iterations/prune/checkpoints/checkpoint-5.pt'
+    model_type = 'googlenet'
+    gpu = 0
     evaluator = Model_Evaluator(model_type=model_type, model_path=pathlib.Path(path), gpu=gpu)
-    evaluator.all_results()
+    evaluator.run()
