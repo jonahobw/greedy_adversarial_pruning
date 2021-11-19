@@ -15,6 +15,7 @@ from typing import Callable
 import numpy as np
 from shrinkbench.experiment import TrainingExperiment, PruningExperiment, AttackExperiment
 from nets import get_hyperparameters, best_model
+from evaulate_model import Model_Evaluator
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("Experiment")
@@ -115,7 +116,7 @@ class Experiment:
         self.train_kwargs, self.prune_kwargs = get_hyperparameters(
             model_type, debug=debug
         )
-        if train_kwargs:
+        if train_kwargs is not None:
             self.train_kwargs['train_kwargs'].update(train_kwargs)
 
         self.gpu = gpu
@@ -291,6 +292,10 @@ class Experiment:
         # if we are pruning/quantizing, attack runs here when we have the final model we want to attack.
         if self.attack_method is not None and not attacked:
             self.attack()
+            attacked = True
+
+        a = Model_Evaluator(self.model_type, self.model_path, gpu=self.gpu)
+        a.run(attack=attacked)
 
         self.email(f"Experiment ended for {self.name}", self.params)
 

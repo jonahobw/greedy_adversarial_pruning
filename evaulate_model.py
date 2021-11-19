@@ -51,13 +51,12 @@ class Model_Evaluator(DNNExperiment):
             self.dl_kwargs = self.dl_kwargs.update(dl_kwargs)
         self.build_dataloader(dataset=dataset, **self.dl_kwargs)
         self.build_model(self.model_type, pretrained=False, resume=self.model_path, dataset=dataset)
-        self.to_device()
 
     def clean_acc(self):
-        res = list(accuracy(self.model, self.train_dl, (1, 5)))
+        res = list(accuracy(model=self.model, dataloader=self.train_acc_dl, topk=(1, 5)))
         self.clean_train_acc1 = res[0]
         self.clean_train_acc5 = res[1]
-        res = list(accuracy(self.model, self.val_dl, (1, 5)))
+        res = list(accuracy(model=self.model, dataloader=self.val_dl, topk=(1, 5)))
         self.clean_val_acc1 = res[0]
         self.clean_val_acc5 = res[1]
 
@@ -134,17 +133,19 @@ class Model_Evaluator(DNNExperiment):
         for name in ['clean_train_acc1', 'clean_train_acc5', 'clean_val_acc1', 'clean_val_acc5', 'model_size',
                      'model_size_nz', 'compression_ratio', 'flops', 'flops_nz', 'theoretical_speedup',
                      'adv_results']:
-            metrics[name] = getattr(self, name)
+            if hasattr(self, name):
+                metrics[name] = getattr(self, name)
 
         print(json.dumps(metrics, indent=4))
 
-    def run(self):
-        print("Getting clean accuracy ...")
+    def run(self, attack=False):
+        print("Evaluating model ...\nGetting clean accuracy ...")
         self.clean_acc()
         print("Getting pruning metrics ...")
         self.prune_metrics()
-        print("Getting adversarial accuracy ...")
-        self.adv_acc()
+        if attack:
+            print("Getting adversarial accuracy ...")
+            self.adv_acc()
         self.print_results()
 
 
