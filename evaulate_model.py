@@ -26,9 +26,10 @@ class Model_Evaluator(DNNExperiment):
         "num_workers": 4,
     }
 
-    def __init__(self, model_type, model_path, dataset='CIFAR10', gpu=None, seed=42, dl_kwargs: {} = None):
+    def __init__(self, model_type, model_path, dataset='CIFAR10', gpu=None, seed=42, dl_kwargs: {} = None, debug=None):
         super().__init__(seed=seed)
 
+        self.debug = debug
         self.fix_seed(seed, deterministic=True)
 
         # set environment variable to be used by shrinkbench
@@ -53,10 +54,10 @@ class Model_Evaluator(DNNExperiment):
         self.build_model(self.model_type, pretrained=False, resume=self.model_path, dataset=dataset)
 
     def clean_acc(self):
-        res = list(accuracy(model=self.model, dataloader=self.train_acc_dl, topk=(1, 5)))
+        res = list(accuracy(model=self.model, dataloader=self.train_acc_dl, topk=(1, 5), debug=self.debug))
         self.clean_train_acc1 = res[0]
         self.clean_train_acc5 = res[1]
-        res = list(accuracy(model=self.model, dataloader=self.val_dl, topk=(1, 5)))
+        res = list(accuracy(model=self.model, dataloader=self.val_dl, topk=(1, 5), debug=self.debug))
         self.clean_val_acc1 = res[0]
         self.clean_val_acc5 = res[1]
 
@@ -82,13 +83,13 @@ class Model_Evaluator(DNNExperiment):
         self.model.eval()
 
         if train:
-            dl = self.train_dl
+            dl = self.train_acc_dl
             data = "train"
         else:
             dl = self.val_dl
             data = "test"
 
-        results = {"dataset": data, "inputs_tested": 0}
+        results = {"adversarial_dataset": data, "inputs_tested": 0}
 
         clean_acc1 = OnlineStats()
         clean_acc5 = OnlineStats()
@@ -99,6 +100,8 @@ class Model_Evaluator(DNNExperiment):
         epoch_iter.set_description(f"{attack_name} on {data} dataset")
 
         for i, (x, y) in enumerate(epoch_iter, start=1):
+            if self.debug is not None and i > self.debug:
+                break
             x, y = x.to(self.device), y.to(self.device)
             x_adv = attacks[attack_name](self.model, x, **attack_kwargs)
             y_pred = self.model(x)  # model prediction on clean examples
@@ -137,6 +140,7 @@ class Model_Evaluator(DNNExperiment):
                 metrics[name] = getattr(self, name)
 
         print(json.dumps(metrics, indent=4))
+        return metrics
 
     def run(self, attack=False):
         print("Evaluating model ...\nGetting clean accuracy ...")
@@ -146,7 +150,7 @@ class Model_Evaluator(DNNExperiment):
         if attack:
             print("Getting adversarial accuracy ...")
             self.adv_acc()
-        self.print_results()
+        return self.print_results()
 
 
 if __name__ == '__main__':

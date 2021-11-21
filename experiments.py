@@ -5,12 +5,14 @@ Run experiments that train, prune and finetune or quantize, and attack a DNN.
 # pylint: disable=import-error, too-many-instance-attributes, too-many-arguments
 # pylint: disable=too-many-locals, logging-fstring-interpolation, invalid-name
 # pylint: disable=unspecified-encoding
-
+import copy
 import json
+import csv
 from pathlib import Path
 import os
 import logging
 from typing import Callable
+import datetime
 
 import numpy as np
 from shrinkbench.experiment import TrainingExperiment, PruningExperiment, AttackExperiment
@@ -35,7 +37,7 @@ class Experiment:
         best_model_metric: str = None,
         quantization: int = None,
         prune_method: str = None,
-        prune_compression: int = None,
+        prune_compression: int = 1,
         finetune_epochs: int = None,
         attack_method: str = None,
         attack_kwargs: dict = None,
@@ -254,22 +256,24 @@ class Experiment:
                     self.prune_compression,
                 )
 
-    def save_variables(self) -> None:
+    def save_variables(self, write=True) -> None:
         """Save experiment parameters to a file in this experiment's folder"""
 
-        params_path = self.paths["model"] / "experiment_params.json"
+        timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        params_path = self.paths["model"] / f"experiment_params_{timestamp}.json"
         variables = ["name", "experiment_number", "dataset", "model_type", "model_path",
                      "best_model_metric", "quantization", "prune_method", "prune_compression",
                      "finetune_epochs", "attack_method", "attack_kwargs", "email_verbose",
                      "gpu", "debug", "save_one_checkpoint", "seed", "train_from_scratch",
-                     "train_kwargs", "prune_kwargs"]
+                     "train_kwargs", "prune_kwargs", "dataset"]
         params = {x: getattr(self, x) for x in variables}
         default = lambda x: "json encode error"
         params = json.dumps(params, skipkeys=True, indent=4, default=default)
         # params["train_kwargs"] = json.dumps(self.train_kwargs, skipkeys=True, indent=4, default=default)
         # params["prune_kwargs"] = json.dumps(self.prune_kwargs, skipkeys=True, indent=4, default=default)
-        with open(params_path, "w") as file:
-            file.write(params)
+        if write:
+            with open(params_path, "w") as file:
+                file.write(params)
         return params
 
     def run(self) -> None:
@@ -294,8 +298,10 @@ class Experiment:
             self.attack()
             attacked = True
 
-        a = Model_Evaluator(self.model_type, self.model_path, gpu=self.gpu)
-        a.run(attack=attacked)
+        a = Model_Evaluator(self.model_type, self.model_path, gpu=self.gpu, debug=self.debug)
+        self.model_eval_results = a.run(attack=attacked)
+
+        self.update_csv()
 
         self.email(f"Experiment ended for {self.name}", self.params)
 
@@ -402,6 +408,45 @@ class Experiment:
                 json.dumps(self.attack_exp.save_variables(), indent=4)
             )
 
+    def update_csv(self):
+        """
+        Add the results of this experiment to the experiments/experiment_{#}/logs.csv file.
+        """
+        assert self.model_eval_results is not None
+
+        columns = ['timestamp', 'debug', 'name', 'experiment_number', 'dataset', 'model_type',
+                   'model_path', 'best_model_metric', 'quantization', 'prune_method',
+                   'prune_compression', 'finetune_epochs', 'attack_method', 'attack_kwargs',
+                   'email_verbose', 'gpu', 'save_one_checkpoint', 'seed', 'train_from_scratch',
+                   'train_kwargs', 'prune_kwargs', 'clean_train_acc1', 'clean_train_acc5',
+                   'clean_val_acc1', 'clean_val_acc5', 'model_size', 'model_size_nz',
+                   'compression_ratio', 'flops', 'flops_nz', 'theoretical_speedup', 'adv_acc1',
+                   'adv_acc5']
+
+        results = {x: None for x in columns}
+
+        timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        results["timestamp"] = timestamp
+        results.update(json.loads(self.save_variables(write=False)))
+
+        model_eval_results = copy.deepcopy(self.model_eval_results)
+        if "adv_results" in self.model_eval_results.keys():
+            # flatten model_eval_results
+            adv_results = model_eval_results.pop("adv_results")
+            model_eval_results["adv_acc1"] = adv_results["adv_acc1"]
+            model_eval_results["adv_acc5"] = adv_results["adv_acc5"]
+
+        results.update(model_eval_results)
+
+        path = self.paths["logs.csv"]
+        if not path.exists():
+            with open(path, 'w') as file:
+                writer = csv.DictWriter(file, fieldnames=results.keys(), lineterminator='\n')
+                writer.writeheader()
+        with open(path, 'a') as file:
+            writer = csv.DictWriter(file, fieldnames=results.keys(), lineterminator='\n')
+            writer.writerow(results)
+
 
 def check_folder_structure(
     experiment_number: int,
@@ -447,6 +492,8 @@ def check_folder_structure(
                 ResNet20/
                 GoogLeNet/
                 MobileNet/
+                # csv to store high level results of all experiments
+                logs.csv
             experiment2/
                 ...
 
@@ -514,6 +561,8 @@ def check_folder_structure(
     for folder_name in path_dict.keys():
         if not path_dict[folder_name].exists():
             path_dict[folder_name].mkdir(parents=True, exist_ok=True)
+
+    path_dict["logs.csv"] = path_dict["experiment"] / f"experiment_{experiment_number}_logs.csv"
 
     # set environment variable to be used by shrinkbench
     os.environ["DATAPATH"] = str(path_dict["datasets"])
