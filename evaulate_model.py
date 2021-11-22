@@ -26,7 +26,8 @@ class Model_Evaluator(DNNExperiment):
         "num_workers": 4,
     }
 
-    def __init__(self, model_type, model_path, dataset='CIFAR10', gpu=None, seed=42, dl_kwargs: {} = None, debug=None):
+    def __init__(self, model_type, model_path, dataset='CIFAR10', gpu=None, seed=42, dl_kwargs: {} = None, debug=None,
+                 attack_method='pgd', attack_kwargs=None):
         super().__init__(seed=seed)
 
         self.debug = debug
@@ -52,6 +53,8 @@ class Model_Evaluator(DNNExperiment):
             self.dl_kwargs = self.dl_kwargs.update(dl_kwargs)
         self.build_dataloader(dataset=dataset, **self.dl_kwargs)
         self.build_model(self.model_type, pretrained=False, resume=self.model_path, dataset=dataset)
+        self.attack_method = attack_method
+        self.attack_kwargs = attack_kwargs
 
     def clean_acc(self):
         res = list(accuracy(model=self.model, dataloader=self.train_acc_dl, topk=(1, 5), debug=self.debug))
@@ -78,7 +81,9 @@ class Model_Evaluator(DNNExperiment):
         self.flops_nz = ops_nz
         self.theoretical_speedup = ops / ops_nz
 
-    def adv_acc(self, train=True, attack_name='pgd', attack_kwargs={"eps": 2 / 255, "eps_iter": 0.001, "nb_iter": 10, "norm": np.inf}):
+    def adv_acc(self, train=True):
+        assert self.attack_method is not None
+        assert self.attack_kwargs is not None
 
         self.model.eval()
 
@@ -103,7 +108,7 @@ class Model_Evaluator(DNNExperiment):
             if self.debug is not None and i > self.debug:
                 break
             x, y = x.to(self.device), y.to(self.device)
-            x_adv = attacks[attack_name](self.model, x, **attack_kwargs)
+            x_adv = attacks[self.attack_method](self.model, x, **self.attack_kwargs)
             y_pred = self.model(x)  # model prediction on clean examples
             y_pred_adv = self.model(x_adv)  # model prediction on adversarial examples
 
@@ -147,7 +152,7 @@ class Model_Evaluator(DNNExperiment):
         self.clean_acc()
         print("Getting pruning metrics ...")
         self.prune_metrics()
-        if attack:
+        if attack and self.attack_method is not None and self.attack_kwargs is not None:
             print("Getting adversarial accuracy ...")
             self.adv_acc()
         return self.print_results()
