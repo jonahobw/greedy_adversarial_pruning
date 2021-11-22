@@ -34,6 +34,7 @@ class Experiment:
         dataset: str = None,
         model_type: str = None,
         model_path: str = None,
+        resume: bool = False,
         best_model_metric: str = None,
         quantization: int = None,
         prune_method: str = None,
@@ -59,6 +60,9 @@ class Experiment:
         :param model_path: optionally provide a relative path to a pretrained model.  If specified,
             the training will be skipped as the model is already trained.  Note: this path is
             relative from the repository root aicas/
+        :param resume: (only valid when specifying model path).  If False, will use the pretrained model
+            specified in <model_path> to create a new experiment with its own folder.  If True, will
+            continue the experiment that includes use the pretrained model in that model's folder.
         :param best_model_metric: metric to use to determine which is the best model.  If none, the weights
             from the last epoch of training/finetuning will be used.
         :param quantization: the modulus for quantization.
@@ -87,6 +91,7 @@ class Experiment:
         self.dataset = dataset
         self.model_type = model_type
         self.model_path = model_path
+        self.resume = resume
         self.best_model_metric = best_model_metric
         self.quantization = quantization
         self.prune_method = prune_method
@@ -144,13 +149,15 @@ class Experiment:
         """
         Setup the paths to the experiment folders.
 
-        Calls check_folder_structure() to generate paths.  If a model_path is provided, meaning
-        that a model has already been trained, then will find the existing paths instead of creating them.
+        Calls check_folder_structure() to generate paths.  If a model_path is provided, meaning that
+        a model has already been trained, and self.resume is True, then will find the existing paths
+        instead of creating them
 
         :raises ValueError if a model path is provided, and any of the provided experiment_number, dataset,
-            model_type, quantization, prune_method, attack_method, finetune_epochs, or prune_compression
-            does not match the ones found using the model_path.
-        :returns a tuple (str, dict) from check_folder_strucuture.
+            model_type do not match the ones found in the model path.  If self.resume is true, also raises
+            this error if quantization, prune_method, attack_method, finetune_epochs, or prune_compression
+            do not match the ones found using the model_path.
+        :returns a tuple (str, dict) from check_folder_strucuture().
         """
 
         if self.model_path:
@@ -178,73 +185,74 @@ class Experiment:
             else:
                 self.dataset =  m_path[m_path.find(self.model_type):].split(sep)[1]
 
-            if self.quantization:
-                # only throw an error if there is a different quantization already applied.
-                if "quantization" in m_path:
-                    if f"{self.quantization}_quantization" not in m_path:
-                        raise ValueError(f"Provided quantization {self.quantization} but provided model path"
-                                         f"\n{self.model_path} does not include this quantization.")
-            else:
-                loc = m_path.find("quantization")
-                if loc >= 0:
-                    self.quantization = int(m_path[:loc].split("_")[-2])
+            if self.resume:
+                if self.quantization:
+                    # only throw an error if there is a different quantization already applied.
+                    if "quantization" in m_path:
+                        if f"{self.quantization}_quantization" not in m_path:
+                            raise ValueError(f"Provided quantization {self.quantization} but provided model path"
+                                             f"\n{self.model_path} does not include this quantization.")
                 else:
-                    self.quantization = None
-
-            # indicates whether or not the model from model_path is already pruned.
-            already_pruned = False
-
-            if self.prune_compression:
-                # only throw an error if there is a different compression already applied.
-                if "compression" in m_path:
-                    if f"{self.prune_compression}_compression" not in m_path:
-                        raise ValueError(f"Provided pruning compression {self.prune_compression} but provided model path"
-                                         f"\n{self.model_path} does not include this prune compression.")
+                    loc = m_path.find("quantization")
+                    if loc >= 0:
+                        self.quantization = int(m_path[:loc].split("_")[-2])
                     else:
-                        already_pruned = True
-            else:
-                loc = m_path.find("compression")
-                if loc >= 0:
-                    self.prune_compression = int(m_path[:loc].split("_")[-2])
-                else:
-                    self.prune_compression = None
+                        self.quantization = None
 
-            if self.prune_method:
-                # only throw an error if there is a different pruning already applied
-                #   (checked using already_pruned variable)
-                if self.prune_method not in m_path and already_pruned:
-                    raise ValueError(f"Provided pruning method {self.prune_method} but provided model path"
-                                     f"\n{self.model_path} does not include this pruning method.")
-            else:
+                # indicates whether or not the model from model_path is already pruned.
+                already_pruned = False
+
                 if self.prune_compression:
-                    self.prune_method = m_path[:m_path.find(f"{self.prune_compression}_compression")].split("_")[-2]
+                    # only throw an error if there is a different compression already applied.
+                    if "compression" in m_path:
+                        if f"{self.prune_compression}_compression" not in m_path:
+                            raise ValueError(f"Provided pruning compression {self.prune_compression} but provided model path"
+                                             f"\n{self.model_path} does not include this prune compression.")
+                        else:
+                            already_pruned = True
                 else:
-                    self.prune_method = None
+                    loc = m_path.find("compression")
+                    if loc >= 0:
+                        self.prune_compression = int(m_path[:loc].split("_")[-2])
+                    else:
+                        self.prune_compression = None
 
-            if self.finetune_epochs:
-                # only throw an error if there is a different finetuning already applied
-                #   (checked using already_pruned variable)
-                if f"{self.finetune_epochs}_finetune_iterations" not in m_path and already_pruned:
-                    raise ValueError(f"Provided finetune epochs {self.finetune_epochs} but provided model path"
-                                     f"\n{self.model_path} does not include this finetune_epochs.")
-            else:
                 if self.prune_method:
-                    self.finetune_epochs = int(m_path[:m_path.find("finetune")].split("_")[-2])
+                    # only throw an error if there is a different pruning already applied
+                    #   (checked using already_pruned variable)
+                    if self.prune_method not in m_path and already_pruned:
+                        raise ValueError(f"Provided pruning method {self.prune_method} but provided model path"
+                                         f"\n{self.model_path} does not include this pruning method.")
                 else:
-                    self.finetune_epochs = None
+                    if self.prune_compression:
+                        self.prune_method = m_path[:m_path.find(f"{self.prune_compression}_compression")].split("_")[-2]
+                    else:
+                        self.prune_method = None
 
-            if self.quantization:
-                # only throw an error if there is a different quantization already applied
-                if "quantization" in m_path:
-                    if f"{self.quantization}_quantization" not in m_path:
-                        raise ValueError(f"Provided quantization {self.quantization} but provided model path"
-                                         f"\n{self.model_path} does not include this quantization.")
-            else:
-                loc = m_path.find("quantization")
-                if loc >= 0:
-                    self.quantization = int(m_path[:loc].split("_")[-2])
+                if self.finetune_epochs:
+                    # only throw an error if there is a different finetuning already applied
+                    #   (checked using already_pruned variable)
+                    if f"{self.finetune_epochs}_finetune_iterations" not in m_path and already_pruned:
+                        raise ValueError(f"Provided finetune epochs {self.finetune_epochs} but provided model path"
+                                         f"\n{self.model_path} does not include this finetune_epochs.")
                 else:
-                    self.quantization = None
+                    if self.prune_method:
+                        self.finetune_epochs = int(m_path[:m_path.find("finetune")].split("_")[-2])
+                    else:
+                        self.finetune_epochs = None
+
+                if self.quantization:
+                    # only throw an error if there is a different quantization already applied
+                    if "quantization" in m_path:
+                        if f"{self.quantization}_quantization" not in m_path:
+                            raise ValueError(f"Provided quantization {self.quantization} but provided model path"
+                                             f"\n{self.model_path} does not include this quantization.")
+                else:
+                    loc = m_path.find("quantization")
+                    if loc >= 0:
+                        self.quantization = int(m_path[:loc].split("_")[-2])
+                    else:
+                        self.quantization = None
 
         return check_folder_structure(
                     self.experiment_number,
