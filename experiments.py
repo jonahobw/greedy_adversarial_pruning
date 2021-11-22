@@ -144,6 +144,7 @@ class Experiment:
         self.prune_exp = None
         self.attack_exp = None
         self.attack_results = None
+        self.all_results = None
 
     def generate_paths(self):
         """
@@ -466,6 +467,8 @@ class Experiment:
         with open(path, 'a') as file:
             writer = csv.DictWriter(file, fieldnames=results.keys(), lineterminator='\n')
             writer.writerow(results)
+
+        self.all_results = results
 
 
 def check_folder_structure(

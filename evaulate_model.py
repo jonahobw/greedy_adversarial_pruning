@@ -40,7 +40,7 @@ class Model_Evaluator(DNNExperiment):
         self.path = b
         if os.name != "nt":
             self.path = pathlib.Path(b.as_posix())
-        print(f"Provided model path: {self.path}")
+        #print(f"Provided model path: {self.path}")
         if not self.path.exists():
             raise FileNotFoundError(f"Model path {path} not found.")
         self.resume = self.path

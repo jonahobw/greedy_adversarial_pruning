@@ -1,7 +1,8 @@
 """Utility functions including email."""
 
 # pylint: disable=too-many-arguments, invalid-name, too-few-public-methods
-
+import copy
+from itertools import product
 from pathlib import Path
 from smtplib import SMTPException, SMTP_SSL
 import ssl
@@ -109,8 +110,8 @@ def timer(time_in_s):
 
 def generate_permutations(list_args: dict) -> list:
     """
-    Given several parameters values which each can take multiple values, return all permutations
-    of the parameters.
+    Given a dict of several parameters values which each can take multiple values given as lists,
+    return all permutations of the parameters as a list of dicts.
 
     example input:
     {
@@ -144,33 +145,14 @@ def generate_permutations(list_args: dict) -> list:
         parameter combinations.
     """
 
-    #Todo there is a bug where if the first list has more than 2 elements, multiple copies of the same element
-    # get added.  the base case needs to be fixed.
-
-
-    permutations = []
-
-    while(len(list_args) > 0):
-        parameter, vals = list_args.popitem()     # popitem returns a tuple (key, val)
-        for val in vals:
-            temp = permutations.copy()  # must do this to prevent infinite loop
-            for permutation in temp:
-                if parameter in permutation:
-                    new_permutation = permutation.copy()
-                    new_permutation[parameter] = val
-                    permutations.append(new_permutation)
-                else:
-                    permutation[parameter] = val
-            if len(permutations) == 0:
-                permutations.append({parameter: val})
-    return permutations
+    return [dict(zip(list_args, v)) for v in product(*list_args.values())]
 
 
 if __name__ == "__main__":
     print(f"Testing on module {Path.cwd()}")
     example =     {
-        "model_type": ["vgg_bn_drop"],   #, "resnet20"],
-        #"prune_method": ["RandomPruning"],
+        "model_type": ["vgg_bn_drop", "resnet20"],
+        "prune_method": ["RandomPruning"],
         "finetune_iterations": [10, 20, 40]
     }
     a = generate_permutations(example)

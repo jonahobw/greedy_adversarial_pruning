@@ -1,7 +1,7 @@
 """Run experiments based off of an experiments.json config file."""
 
 # pylint: disable=import-error, unspecified-encoding, invalid-name
-
+import json
 from pathlib import Path
 import yaml
 import time
@@ -49,7 +49,7 @@ def run_experiments(filename: str = None) -> None:
 
     now = time.time()
 
-    for i, experiment_args in enumerate(args["experiments"]):
+    for i, experiment_args in enumerate(convert_experiment_list(args["experiments"])):
         try:
             since = now
             if not once_per_experiment and email_fn is not None:
@@ -77,7 +77,9 @@ def run_experiments(filename: str = None) -> None:
                     f"Estimated time remaining ({left} experiments left and "
                     f"{timer(experiment_time.mean)} per experiment): "
                     f"{estimated_time_remaining}\n\n"
-                    f"{e.params}\n")
+                    f"{e.params}\n"
+                    f"Results:\n"
+                    f"{json.dumps(e.all_results, indent=4)}")
 
         except Exception as e:
             tb = traceback.format_exc()
@@ -94,7 +96,7 @@ def run_experiments(filename: str = None) -> None:
 
 def convert_experiment_list(args):
     """
-    Convert the experiment arguments passed from the config file to a list.
+    Convert the experiment arguments passed from the config file to a flattened list of experiments.
 
     The config file allows for multiple experiments to be run by specifying a list of values for
     any experiment parameter.  For example, this function will convert a config file with
@@ -104,6 +106,10 @@ def convert_experiment_list(args):
         prune_method: [RandomPruning, GlobalMagWeight]
         prune_compression: 2
         finetune_epochs: 40
+
+    -   model_type: [googlenet, mobilenetv2]
+        prune_method: GlobalMagWeight
+        prune_compression: [4, 8]
 
     to a list of experiment parameters as
 
@@ -131,33 +137,63 @@ def convert_experiment_list(args):
             "prune_method": "GlobalMagWeight",
             "prune_compression": 2
             "finetune_epochs": 40
+        },
+        {
+            "model_type": "googlenet",
+            "prune_method": "GlobalMagWeight",
+            "prune_compression": 4
+        },
+        {
+            "model_type": "googlenet",
+            "prune_method": "GlobalMagWeight",
+            "prune_compression": 8
+        },
+                {
+            "model_type": "mobilenetv2",
+            "prune_method": "GlobalMagWeight",
+            "prune_compression": 4
+        },
+        {
+            "model_type": "mobilenetv2",
+            "prune_method": "GlobalMagWeight",
+            "prune_compression": 8
         }
     ]
+
+    The config file allows for multiple
 
     :param args: the dictionary resulting from parsing the config file.
 
     :returns: a list of dictionaries, each of which represents the kwargs for 1 Experiment object.
     """
 
-    # dict of args which have a list
-    list_args = {}
+    # list of dictionaries to return
+    all_experiment_params = []
 
-    # dict of args that do not have a list
-    common_args = {}
+    for experiment_args in args:
 
-    for arg in args["experiments"]:
-        if isinstance(args["experiments"][arg], list):
-            arr[arg] = args["experiments"][arg]
-        else:
-            common_args[arg] = args["experiments"][arg]
+        # dict of args which have a list
+        list_args = {}
 
-    # now create all permutations of the list_args:
-    permutations = generate_permutations(list_args)
+        # dict of args that do not have a list
+        common_args = {}
 
-    for permutation in permutations:
-        permutation.update(common_args)
+        for arg in experiment_args:
+            if isinstance(experiment_args[arg], list):
+                list_args[arg] = experiment_args[arg]
+            else:
+                common_args[arg] = experiment_args[arg]
 
-    return permutations
+        # now create all permutations of the list_args:
+        permutations = generate_permutations(list_args)
+
+        for permutation in permutations:
+            permutation.update(common_args)
+
+        all_experiment_params.extend(permutations)
+
+    return all_experiment_params
+
 
 if __name__ == "__main__":
     import argparse
