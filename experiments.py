@@ -138,6 +138,7 @@ class Experiment:
         self.train_exp = None
         self.prune_exp = None
         self.attack_exp = None
+        self.attack_results = None
 
     def generate_paths(self):
         """
@@ -266,7 +267,12 @@ class Experiment:
                      "finetune_epochs", "attack_method", "attack_kwargs", "email_verbose",
                      "gpu", "debug", "save_one_checkpoint", "seed", "train_from_scratch",
                      "train_kwargs", "prune_kwargs", "dataset"]
-        params = {x: getattr(self, x) for x in variables}
+        params = {
+            x: str(getattr(self, x))
+            if isinstance(getattr(self, x), Path)
+            else getattr(self, x)
+            for x in variables
+        }
         default = lambda x: "json encode error"
         params = json.dumps(params, skipkeys=True, indent=4, default=default)
         # params["train_kwargs"] = json.dumps(self.train_kwargs, skipkeys=True, indent=4, default=default)
@@ -298,8 +304,8 @@ class Experiment:
             self.attack()
             attacked = True
 
-        a = Model_Evaluator(self.model_type, self.model_path, gpu=self.gpu, debug=self.debug)
-        self.model_eval_results = a.run(attack=attacked)
+        a = Model_Evaluator(self.model_type, self.model_path, gpu=self.gpu, debug=self.debug, attack_method=self.attack_method, attack_kwargs=self.attack_kwargs)
+        self.model_eval_results = a.run(attack= not attacked)
 
         self.update_csv()
 
@@ -402,6 +408,8 @@ class Experiment:
         )
         self.attack_exp.run()
 
+        self.attack_results = self.attack_exp.results
+
         if self.email_verbose:
             self.email(
                 f"{self.attack_method} attack on {self.model_type} Concluded.",
@@ -435,6 +443,10 @@ class Experiment:
             adv_results = model_eval_results.pop("adv_results")
             model_eval_results["adv_acc1"] = adv_results["adv_acc1"]
             model_eval_results["adv_acc5"] = adv_results["adv_acc5"]
+        elif self.attack_results is not None:
+            adv_results = {"adv_acc1": self.attack_results["adv_acc1"],
+                           "adv_acc5": self.attack_results["adv_acc5"]}
+            model_eval_results.update(adv_results)
 
         results.update(model_eval_results)
 
