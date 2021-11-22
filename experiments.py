@@ -170,7 +170,7 @@ class Experiment:
                     raise ValueError(f"Provided experiment number {self.experiment_number} but provided model path"
                                      f"\n{self.model_path} does not include this experiment number.")
             else:
-                self.experiment_number = int(m_path[m_path.find("experiment_"):].split("_")[1])
+                experiment_number = int(m_path[m_path.find("experiment_"):].split("_")[1].split(sep)[0])
 
             if self.model_type:
                 if self.model_type not in m_path:

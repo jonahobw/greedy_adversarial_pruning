@@ -44,12 +44,13 @@ def run_experiments(filename: str = None) -> None:
         if "once_per_experiment" in args["email"]:
             once_per_experiment = args["email"]["once_per_experiment"]
 
-    num_experiments = len(args["experiments"])
+    all_args = convert_experiment_list(args["experiments"])
+    num_experiments = len(all_args)
     experiment_time = OnlineStats()
 
     now = time.time()
 
-    for i, experiment_args in enumerate(convert_experiment_list(args["experiments"])):
+    for i, experiment_args in enumerate(all_args):
         try:
             since = now
             if not once_per_experiment and email_fn is not None:
