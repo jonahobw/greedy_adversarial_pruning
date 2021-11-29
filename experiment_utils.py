@@ -2,6 +2,7 @@
 
 # pylint: disable=too-many-arguments, invalid-name, too-few-public-methods
 import copy
+import os
 from itertools import product
 from pathlib import Path
 from smtplib import SMTPException, SMTP_SSL
@@ -106,6 +107,17 @@ def timer(time_in_s):
     hours, rem = divmod(time_in_s, 3600)
     minutes, seconds = divmod(rem, 60)
     return "{:0>2}:{:0>2}:{:0>2}".format(int(hours),int(minutes),int(seconds))
+
+
+def format_path(path=None):
+    if path:
+        path = Path(__file__).parent.absolute() / Path(path)
+        if os.name != "nt":
+            path = Path(b.as_posix())
+        if not path.exists():
+            raise FileNotFoundError(f"Model path {model_path} not found.")
+        return path
+    return None
 
 
 def generate_permutations(list_args: dict) -> list:

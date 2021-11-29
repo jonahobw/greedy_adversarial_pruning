@@ -85,7 +85,7 @@ def run_experiments(filename: str = None) -> None:
         except Exception as e:
             tb = traceback.format_exc()
             if email_fn is not None:
-                email_fn("PROGRAM CRASHED", f"{tb}")
+                email_fn("PROGRAM CRASHED", f"{tb}\n\n{json.dumps(experiment_args, indent=4)}")
             raise e
 
     if email_fn is not None:

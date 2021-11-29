@@ -37,7 +37,7 @@ def best_model(path: Path, metric: str = None):
 
 
 def get_hyperparameters(
-    model_type: str, num_workers: int = 8, debug: int = None
+    model_type: str, num_workers: int = 4, debug: int = None
 ) -> (dict, dict):
     """
     Returns the training and pruning hyperparameters for a model

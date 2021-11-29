@@ -18,6 +18,7 @@ import numpy as np
 from shrinkbench.experiment import TrainingExperiment, PruningExperiment, AttackExperiment
 from nets import get_hyperparameters, best_model
 from evaulate_model import Model_Evaluator
+from experiment_utils import format_path
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("Experiment")
@@ -42,6 +43,9 @@ class Experiment:
         finetune_epochs: int = None,
         attack_method: str = None,
         attack_kwargs: dict = None,
+        skip_attack: bool = False,
+        only_transfer: bool = False,
+        transfer_attack_model: str = None,
         email: Callable = None,
         email_verbose: bool=False,
         gpu: int = None,
@@ -71,6 +75,15 @@ class Experiment:
         :param finetune_epochs: number of training epochs after pruning/quantization.
         :param attack_method: the method for generating adversarial inputs.
         :param attack_kwargs: arguments to be passed to the attack function.
+        :param skip_attack: if True, will not run an attack on the model, even if the attack_method
+            and attack_kwargs are provided.  This speeds up experiments for situations where you would
+            only like to adversarially prune a model or run a transfer attack.
+        :param only_transfer: if True, will only run a transfer attack on the model and nothing else.
+            This is only valid if a model path is provided and resume is set to True
+        :param transfer_attack_model: path to a model from which to construct a transfer attack.  Only
+            valid when attack_kwargs are provided.  Will report the ratio: # of adversarial inputs
+            that fooled the transfer model and target model/ # of adversarial inputs that fooled the
+            transfer model.
         :param email: callback function which has a signature of (subject, message).
         :param email_verbose: if true, sends an email at start and end of whole experiment, and end of
             training, pruning, fine-tuning, quantization, and attack.  If false, then only sends an
@@ -90,7 +103,7 @@ class Experiment:
         self.experiment_number = experiment_number
         self.dataset = dataset
         self.model_type = model_type
-        self.model_path = model_path
+        self.model_path = format_path(model_path)
         self.resume = resume
         self.best_model_metric = best_model_metric
         self.quantization = quantization
@@ -99,19 +112,15 @@ class Experiment:
         self.finetune_epochs = finetune_epochs
         self.attack_method = attack_method
         self.attack_kwargs = attack_kwargs
+        self.skip_attack = skip_attack
+        self.only_transfer = only_transfer
+        if self.only_transfer:
+            assert resume, "Resume must be set to True for running a transfer attack and nothing else."
+            assert model_path is not None, "Model path must be provided when only running a transfer attack."
+            assert transfer_attack_model is not None, "Transfer model must be provided when only running a transfer attack."
         self.save_one_checkpoint = save_one_checkpoint
         self.seed = seed
-
-        if self.model_path:
-            #home = str(Path.cwd())
-            #b = Path(home + model_path)
-            b = Path.cwd() / Path(model_path)
-            self.model_path = b
-            if os.name != "nt":
-                self.model_path = Path(b.as_posix())
-            logger.info(f"Provided model path: {self.model_path}")
-            if not self.model_path.exists():
-                raise FileNotFoundError(f"Model path {model_path} not found.")
+        self.transfer_attack_model = format_path(transfer_attack_model)
 
         self.paths, self.name = self.generate_paths()
 
@@ -275,7 +284,8 @@ class Experiment:
                      "best_model_metric", "quantization", "prune_method", "prune_compression",
                      "finetune_epochs", "attack_method", "attack_kwargs", "email_verbose",
                      "gpu", "debug", "save_one_checkpoint", "seed", "train_from_scratch",
-                     "train_kwargs", "prune_kwargs", "dataset"]
+                     "train_kwargs", "prune_kwargs", "dataset", "skip_attack",
+                     "only_transfer", "transfer_attack_model"]
         params = {
             x: str(getattr(self, x))
             if isinstance(getattr(self, x), Path)
@@ -296,22 +306,24 @@ class Experiment:
 
         self.email(f"Experiment started for {self.name}", self.params)
 
-        attacked = False
+        attacked = self.skip_attack
 
-        if self.train_from_scratch:
+        if self.train_from_scratch and not self.only_transfer:
             self.train()
             # if attack is specified, only run after initial training if we aren't pruning/quantizing.
-            if self.attack_method is not None and not self.prune_method and not self.quantization:
+            if self.attack_method and not attacked and not self.prune_method and not self.quantization:
                 self.attack()
                 attacked = True
-        if self.prune_method:
+        if self.prune_method and not self.only_transfer:
             self.prune()
-        if self.quantization:
+        if self.quantization and not self.only_transfer:
             self.quantize()
         # if we are pruning/quantizing, attack runs here when we have the final model we want to attack.
-        if self.attack_method is not None and not attacked:
+        if self.attack_method and not attacked and not self.only_transfer:
             self.attack()
             attacked = True
+        if self.transfer_attack_model is not None:
+            self.attack(transfer=True)
 
         a = Model_Evaluator(self.model_type, self.model_path, gpu=self.gpu, debug=self.debug, attack_method=self.attack_method, attack_kwargs=self.attack_kwargs)
         self.model_eval_results = a.run(attack= not attacked)
@@ -388,7 +400,7 @@ class Experiment:
     def quantize(self):
         """Quantize a DNN."""
 
-    def attack(self):
+    def attack(self, transfer=False):
         """Attack a DNN."""
 
         default_pgd_args = {"eps": 2 / 255, "eps_iter": 0.001, "nb_iter": 10, "norm": np.inf}
@@ -402,7 +414,7 @@ class Experiment:
             "provided to train a model from scratch."
         )
 
-        self.attack_exp = AttackExperiment(
+        attack_exp = AttackExperiment(
             model_path=self.model_path,
             model_type=self.model_type,
             dataset=self.dataset,
@@ -411,13 +423,20 @@ class Experiment:
             attack=self.attack_method,
             attack_params=default_pgd_args,
             path=self.paths["model"],
+            transfer_model_path=str(self.transfer_attack_model) if transfer else None,
             gpu=self.gpu,
             seed=self.seed,
             debug=self.debug,
         )
-        self.attack_exp.run()
 
-        self.attack_results = self.attack_exp.results
+        if transfer:
+            self.transfer_attack_exp = attack_exp
+            self.transfer_attack_exp.run_transfer()
+            self.transfer_results = self.transfer_attack_exp.transfer_results
+        else:
+            self.attack_exp = attack_exp
+            self.attack_exp.run()
+            self.attack_results = self.attack_exp.results
 
         if self.email_verbose:
             self.email(
@@ -438,7 +457,7 @@ class Experiment:
                    'train_kwargs', 'prune_kwargs', 'clean_train_acc1', 'clean_train_acc5',
                    'clean_val_acc1', 'clean_val_acc5', 'model_size', 'model_size_nz',
                    'compression_ratio', 'flops', 'flops_nz', 'theoretical_speedup', 'adv_acc1',
-                   'adv_acc5']
+                   'adv_acc5', 'transfer_model', 'transfer_attack_results']
 
         results = {x: None for x in columns}
 
@@ -458,6 +477,10 @@ class Experiment:
             model_eval_results.update(adv_results)
 
         results.update(model_eval_results)
+
+        if self.transfer_results:
+            results["transfer_model"] = str(self.transfer_attack_exp.transfer_model_path)
+            results["transfer_attack_results"] = self.transfer_results
 
         path = self.paths["logs.csv"]
         if not path.exists():
@@ -508,6 +531,7 @@ def check_folder_structure(
                             shrinkbench folder generated for pruning/
                                 attacks/
                                     <attack_method>/
+                                        transfer_attacks/
                                         images/
                                         train_attack_results-*.json
                             experiment_params.json
