@@ -438,6 +438,9 @@ class Experiment:
             self.attack_exp.run()
             self.attack_results = self.attack_exp.results
 
+        # in case this function gets called more than once
+        self.attack_kwargs["train"] = train
+
         if self.email_verbose:
             self.email(
                 f"{self.attack_method} attack on {self.model_type} Concluded.",

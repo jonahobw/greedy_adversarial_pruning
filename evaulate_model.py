@@ -11,15 +11,16 @@ from cleverhans.torch.attacks.projected_gradient_descent import (
     projected_gradient_descent,
 )
 
-from shrinkbench.experiment import DNNExperiment
+from shrinkbench.experiment import QuantizeExperiment
 from shrinkbench import models
 from shrinkbench.models.head import mark_classifier
 from shrinkbench.metrics import model_size, flops, accuracy, correct
 from shrinkbench.util import OnlineStats
+from experiment_utils import format_path
 
 attacks = {'pgd': projected_gradient_descent}
 
-class Model_Evaluator(DNNExperiment):
+class Model_Evaluator(QuantizeExperiment):
     dl_kwargs = {
         "batch_size": 128,
         "pin_memory": False,
@@ -27,14 +28,16 @@ class Model_Evaluator(DNNExperiment):
     }
 
     def __init__(self, model_type, model_path, dataset='CIFAR10', gpu=None, seed=42, dl_kwargs: {} = None, debug=None,
-                 attack_method='pgd', attack_kwargs=None):
-        super().__init__(seed=seed)
+                 attack_method='pgd', attack_kwargs=None, quantized=False):
+        if dl_kwargs:
+            self.dl_kwargs = self.dl_kwargs.update(dl_kwargs)
+        super().__init__(seed=seed, model_path=model_path, model_type=model_type, dataset=dataset, dl_kwargs=self.dl_kwargs, train=True,
+                         path=None, debug=debug)
 
-        self.debug = debug
         self.fix_seed(seed, deterministic=True)
 
         # set environment variable to be used by shrinkbench
-        os.environ["DATAPATH"] = str(pathlib.Path.cwd() / 'datasets')
+        os.environ["DATAPATH"] = str(format_path(r'datasets'))
 
         b = pathlib.Path.cwd() / pathlib.Path(model_path)
         self.path = b
@@ -49,10 +52,15 @@ class Model_Evaluator(DNNExperiment):
         self.dataset=dataset
         self.model_type = model_type
         self.model_path = model_path
-        if dl_kwargs:
-            self.dl_kwargs = self.dl_kwargs.update(dl_kwargs)
+
         self.build_dataloader(dataset=dataset, **self.dl_kwargs)
-        self.build_model(self.model_type, pretrained=False, resume=self.model_path, dataset=dataset)
+        self.quantized = quantized
+        if not quantized:
+            self.build_model(self.model_type, pretrained=False, resume=self.model_path, dataset=dataset)
+        else:
+            self.model = self.run()
+            previous = torch.load(self.model_path, map_location=torch.device('cpu'))
+            self.model.load_state_dict(previous["model_state_dict"], strict=False)
         self.attack_method = attack_method
         self.attack_kwargs = attack_kwargs
 
@@ -147,7 +155,7 @@ class Model_Evaluator(DNNExperiment):
         print(json.dumps(metrics, indent=4))
         return metrics
 
-    def run(self, attack=False):
+    def evaluate(self, attack=False):
         print("Evaluating model ...\nGetting clean accuracy ...")
         self.clean_acc()
         print("Getting pruning metrics ...")
@@ -163,4 +171,4 @@ if __name__ == '__main__':
     model_type = 'googlenet'
     gpu = 0
     evaluator = Model_Evaluator(model_type=model_type, model_path=pathlib.Path(path), gpu=gpu)
-    evaluator.run()
+    evaluator.evaluate()

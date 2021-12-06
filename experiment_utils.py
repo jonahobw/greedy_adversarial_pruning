@@ -113,9 +113,9 @@ def format_path(path=None):
     if path:
         path = Path(__file__).parent.absolute() / Path(path)
         if os.name != "nt":
-            path = Path(b.as_posix())
+            path = Path(path.as_posix())
         if not path.exists():
-            raise FileNotFoundError(f"Model path {model_path} not found.")
+            raise FileNotFoundError(f"Model path {path} not found.")
         return path
     return None
 
