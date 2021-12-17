@@ -5,9 +5,11 @@ import json
 from pathlib import Path
 import yaml
 import time
+import datetime
 import traceback
 import copy
 import logging
+import shutil
 
 from shrinkbench.util import OnlineStats
 
@@ -29,6 +31,7 @@ def run_experiments(filename: str = None) -> None:
         args = yaml.safe_load(file)
 
     common_args = args['common_args']
+    debug = not common_args['debug'] == None  # used to determine whether or not to save yaml file
 
     # this variable gets passed to Experiment class, it is overwritten to a valid email sender
     # if valid email credentials are given in the config file.
@@ -94,6 +97,20 @@ def run_experiments(filename: str = None) -> None:
             f"Total time ({num_experiments} experiments @ {timer(experiment_time.mean)} per "
             f"experiment): {timer(num_experiments * experiment_time.mean)}"
         )
+
+    if not debug:
+        # save the yaml file to ./experiments/yaml/
+        save_yaml(path)
+
+
+def save_yaml(path):
+    save_dir = Path.cwd() / 'experiments' / 'yaml'
+    save_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    save_filename = f"{timestamp}.yaml"
+    save_path = save_dir / save_filename
+    shutil.copy(path, save_path)
+
 
 def convert_experiment_list(args):
     """

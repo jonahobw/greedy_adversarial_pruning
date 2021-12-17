@@ -15,10 +15,10 @@ from typing import Callable
 import datetime
 
 import numpy as np
-from shrinkbench.experiment import TrainingExperiment, PruningExperiment, AttackExperiment
+from shrinkbench.experiment import TrainingExperiment, PruningExperiment, AttackExperiment, QuantizeExperiment
 from nets import get_hyperparameters, best_model
 from evaulate_model import Model_Evaluator
-from experiment_utils import format_path
+from experiment_utils import format_path, find_recent_file
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("Experiment")
@@ -37,14 +37,14 @@ class Experiment:
         model_path: str = None,
         resume: bool = False,
         best_model_metric: str = None,
-        quantization: int = None,
+        quantization: bool = False,
         prune_method: str = None,
         prune_compression: int = 1,
         finetune_epochs: int = None,
         attack_method: str = None,
         attack_kwargs: dict = None,
         skip_attack: bool = False,
-        only_transfer: bool = False,
+        only_attack: bool = False,
         transfer_attack_model: str = None,
         email: Callable = None,
         email_verbose: bool=False,
@@ -69,21 +69,21 @@ class Experiment:
             continue the experiment that includes use the pretrained model in that model's folder.
         :param best_model_metric: metric to use to determine which is the best model.  If none, the weights
             from the last epoch of training/finetuning will be used.
-        :param quantization: the modulus for quantization.
+        :param quantization: If true, quantizes model into int8 after training/pruning.
         :param prune_method: the strategy for the pruning algorithm.
-        :param prune_compression: the desired ratio of parameters in original to pruned model.
-        :param finetune_epochs: number of training epochs after pruning/quantization.
+        :param prune_compression: the desired ratio of parameters in original:pruned model.
+        :param finetune_epochs: number of training epochs after pruning.
         :param attack_method: the method for generating adversarial inputs.
         :param attack_kwargs: arguments to be passed to the attack function.
         :param skip_attack: if True, will not run an attack on the model, even if the attack_method
             and attack_kwargs are provided.  This speeds up experiments for situations where you would
-            only like to adversarially prune a model or run a transfer attack.
-        :param only_transfer: if True, will only run a transfer attack on the model and nothing else.
-            This is only valid if a model path is provided and resume is set to True
-        :param transfer_attack_model: path to a model from which to construct a transfer attack.  Only
-            valid when attack_kwargs are provided.  Will report the ratio: # of adversarial inputs
-            that fooled the transfer model and target model/ # of adversarial inputs that fooled the
-            transfer model.
+            only like to adversarially prune a model or quantize it.
+        :param only_attack: if True, will only run an attack and transfer attack on the model and nothing
+            else. This is only valid if a model path is provided, and resume, is set to True, and
+            transfer_attack_model is provided.
+        :param transfer_attack_model: path to a model from which to construct a transfer attack by
+            generating adversarial inputs on this model and testing them on the model associated with
+            this experiment.  Only valid when attack_kwargs/attack_method are provided.
         :param email: callback function which has a signature of (subject, message).
         :param email_verbose: if true, sends an email at start and end of whole experiment, and end of
             training, pruning, fine-tuning, quantization, and attack.  If false, then only sends an
@@ -91,10 +91,10 @@ class Experiment:
         :param gpu: the number of the gpu to run on.
         :param debug: whether or not to run in debug mode.  If specified, then
             should be an integer representing how many batches to run, and will only run 1
-            epoch for training/validation/fine-tuning, so the experimental results with
+            epoch for training/validation/fine-tuning/attack, so the experimental results with
             this option specified are not valid.
-        :param save_one_checkpoint: if true, removes all previous checkpoints and only keeps this one.
-            Since each checkpoint may be hundreds of MB, this saves lots of memory.
+        :param save_one_checkpoint: if true, then only saves one model after training or finetuning.
+            Since each model may be hundreds of MB, this saves lots of memory.
         :param seed: seed for random number generator.  If provided, behavior will be deterministic.
         :param train_kwargs: training parameters to be passed to the train_kwargs parameter from
             shrinkbench/experiments/train.py TrainingExperiment
@@ -113,11 +113,11 @@ class Experiment:
         self.attack_method = attack_method
         self.attack_kwargs = attack_kwargs
         self.skip_attack = skip_attack
-        self.only_transfer = only_transfer
-        if self.only_transfer:
-            assert resume, "Resume must be set to True for running a transfer attack and nothing else."
-            assert model_path is not None, "Model path must be provided when only running a transfer attack."
-            assert transfer_attack_model is not None, "Transfer model must be provided when only running a transfer attack."
+        self.only_attack = only_attack
+        if self.only_attack:
+            assert resume, "Resume must be set to True when only_attack is set to True."
+            assert model_path is not None, "Model path must be provided when only_attack is set to True."
+            assert transfer_attack_model is not None, "Transfer model must be provided when only_attack is set to True."
         self.save_one_checkpoint = save_one_checkpoint
         self.seed = seed
         self.transfer_attack_model = format_path(transfer_attack_model)
@@ -151,9 +151,9 @@ class Experiment:
         self.params = self.save_variables()
         self.train_exp = None
         self.prune_exp = None
-        self.attack_exp = None
-        self.attack_results = None
-        self.all_results = None
+        self.all_results = {}
+        self.pre_quantized_model = None
+        self.quantized = False
 
     def generate_paths(self):
         """
@@ -174,13 +174,6 @@ class Experiment:
             m_path = str(self.model_path)
             sep = '\\' if '\\' in m_path else '/'
 
-            if self.experiment_number:
-                if f"experiment_{self.experiment_number}" not in m_path:
-                    raise ValueError(f"Provided experiment number {self.experiment_number} but provided model path"
-                                     f"\n{self.model_path} does not include this experiment number.")
-            else:
-                experiment_number = int(m_path[m_path.find("experiment_"):].split("_")[1].split(sep)[0])
-
             if self.model_type:
                 if self.model_type not in m_path:
                     raise ValueError(f"Provided model type {self.model_type} but provided model path"
@@ -196,23 +189,17 @@ class Experiment:
                 self.dataset =  m_path[m_path.find(self.model_type):].split(sep)[1]
 
             if self.resume:
-                if self.quantization:
-                    # only throw an error if there is a different quantization already applied.
-                    if "quantization" in m_path:
-                        if f"{self.quantization}_quantization" not in m_path:
-                            raise ValueError(f"Provided quantization {self.quantization} but provided model path"
-                                             f"\n{self.model_path} does not include this quantization.")
-                else:
-                    loc = m_path.find("quantization")
-                    if loc >= 0:
-                        self.quantization = int(m_path[:loc].split("_")[-2])
-                    else:
-                        self.quantization = None
 
-                # indicates whether or not the model from model_path is already pruned.
+                if self.experiment_number:
+                    if f"experiment_{self.experiment_number}" not in m_path:
+                        raise ValueError(f"Provided experiment number {self.experiment_number} but provided model path"
+                                         f"\n{self.model_path} does not include this experiment number.")
+                else:
+                    experiment_number = int(m_path[m_path.find("experiment_"):].split("_")[1].split(sep)[0])
+
                 already_pruned = False
 
-                if self.prune_compression:
+                if self.prune_compression > 1:
                     # only throw an error if there is a different compression already applied.
                     if "compression" in m_path:
                         if f"{self.prune_compression}_compression" not in m_path:
@@ -251,28 +238,16 @@ class Experiment:
                     else:
                         self.finetune_epochs = None
 
-                if self.quantization:
-                    # only throw an error if there is a different quantization already applied
-                    if "quantization" in m_path:
-                        if f"{self.quantization}_quantization" not in m_path:
-                            raise ValueError(f"Provided quantization {self.quantization} but provided model path"
-                                             f"\n{self.model_path} does not include this quantization.")
-                else:
-                    loc = m_path.find("quantization")
-                    if loc >= 0:
-                        self.quantization = int(m_path[:loc].split("_")[-2])
-                    else:
-                        self.quantization = None
 
         return check_folder_structure(
-                    self.experiment_number,
-                    self.dataset,
-                    self.model_type,
-                    self.quantization,
-                    self.prune_method,
-                    self.attack_method,
-                    self.finetune_epochs,
-                    self.prune_compression,
+                    experiment_number=self.experiment_number,
+                    dataset=self.dataset,
+                    model_type=self.model_type,
+                    quantize=self.quantization,
+                    prune=self.prune_method,
+                    attack=self.attack_method,
+                    finetune_epochs=self.finetune_epochs,
+                    compression=self.prune_compression,
                 )
 
     def save_variables(self, write=True) -> None:
@@ -285,7 +260,7 @@ class Experiment:
                      "finetune_epochs", "attack_method", "attack_kwargs", "email_verbose",
                      "gpu", "debug", "save_one_checkpoint", "seed", "train_from_scratch",
                      "train_kwargs", "prune_kwargs", "dataset", "skip_attack",
-                     "only_transfer", "transfer_attack_model"]
+                     "only_attack", "transfer_attack_model"]
         params = {
             x: str(getattr(self, x))
             if isinstance(getattr(self, x), Path)
@@ -301,36 +276,43 @@ class Experiment:
                 file.write(params)
         return params
 
+    def check_already_done(self):
+        """
+        Checks if the experiment has already been trained, pruned, or quantized
+        :return:
+        """
+        subfolders = [x.name for x in self.paths['model'].iterdir() if x.is_dir()]
+
+        return 'train' in subfolders, 'prune' in subfolders, 'quantize' in subfolders
+
     def run(self) -> None:
         """Train, prune and finetune or quantize, and attack a DNN."""
-
         self.email(f"Experiment started for {self.name}", self.params)
 
-        attacked = self.skip_attack
+        self.already_trained, self.already_pruned, self.already_quantized = self.check_already_done()
 
-        if self.train_from_scratch and not self.only_transfer:
-            self.train()
-            # if attack is specified, only run after initial training if we aren't pruning/quantizing.
-            if self.attack_method and not attacked and not self.prune_method and not self.quantization:
-                self.attack()
-                attacked = True
-        if self.prune_method and not self.only_transfer:
-            self.prune()
-        if self.quantization and not self.only_transfer:
-            self.quantize()
-        # if we are pruning/quantizing, attack runs here when we have the final model we want to attack.
-        if self.attack_method and not attacked and not self.only_transfer:
-            self.attack()
-            attacked = True
-        if self.transfer_attack_model is not None:
-            self.attack(transfer=True)
+        if self.train_from_scratch:
+            if not self.only_attack and not self.already_trained:
+                self.train()
+                self.evaluate(attack=False, subfolder='train')
+            if self.attack_method and not self.skip_attack:
+                self.attack(subfolder='train')
+        if self.prune_method:
+            if not self.only_attack and not self.already_pruned:
+                self.prune()
+                self.evaluate(attack=False, subfolder='prune')
+            if self.attack_method and not self.skip_attack:
+                self.attack(subfolder='prune')
+        if self.quantization:
+            if not self.only_attack and not self.already_quantized:
+                self.quantize()
+                self.evaluate(attack=False, subfolder='quantize')
+            if self.attack_method and not self.skip_attack:
+                self.attack(subfolder='quantize')
 
-        a = Model_Evaluator(self.model_type, self.model_path, gpu=self.gpu, debug=self.debug, attack_method=self.attack_method, attack_kwargs=self.attack_kwargs)
-        self.model_eval_results = a.run(attack= not attacked)
+        results = self.save_results()
 
-        self.update_csv()
-
-        self.email(f"Experiment ended for {self.name}", self.params)
+        self.email(f"Experiment ended for {self.name}", results)
 
     def train(self) -> None:
         """Train a CNN from scratch."""
@@ -399,9 +381,35 @@ class Experiment:
 
     def quantize(self):
         """Quantize a DNN."""
+        self.pre_quantized_model = self.model_path
 
-    def attack(self, transfer=False):
-        """Attack a DNN."""
+        quantize_exp = QuantizeExperiment(
+            model_path=self.model_path,
+            model_type=self.model_type,
+            dataset=self.dataset,
+            dl_kwargs=self.train_kwargs['dl_kwargs'],
+            train=True,
+            path=self.paths['model'],
+            gpu=self.gpu,
+            seed=self.seed,
+            debug=self.debug,
+        )
+
+        quantize_exp.run()
+        self.model_path = quantize_exp.save_model()
+        self.quantized = True
+
+        if self.email_verbose:
+            self.email(f"Quantization for {self.name} completed.", "")
+
+    def attack(self, subfolder):
+        """
+        Attack a DNN.
+
+        :param subfolder: the subfolder to save to.
+        """
+
+        save_folder = self.paths['model'] / subfolder
 
         default_pgd_args = {"eps": 2 / 255, "eps_iter": 0.001, "nb_iter": 10, "norm": np.inf}
 
@@ -414,6 +422,10 @@ class Experiment:
             "provided to train a model from scratch."
         )
 
+        pre_quantized_model = None
+        if self.quantized:
+            pre_quantized_model = self.pre_quantized_model
+
         attack_exp = AttackExperiment(
             model_path=self.model_path,
             model_type=self.model_type,
@@ -422,21 +434,28 @@ class Experiment:
             train=train,
             attack=self.attack_method,
             attack_params=default_pgd_args,
-            path=self.paths["model"],
-            transfer_model_path=str(self.transfer_attack_model) if transfer else None,
+            path=save_folder,
+            transfer_model_path=str(self.transfer_attack_model) if self.transfer_attack_model else None,
             gpu=self.gpu,
             seed=self.seed,
             debug=self.debug,
+            quantized=self.quantized,
+            pre_quantized_model=pre_quantized_model,
         )
 
-        if transfer:
-            self.transfer_attack_exp = attack_exp
-            self.transfer_attack_exp.run_transfer()
-            self.transfer_results = self.transfer_attack_exp.transfer_results
-        else:
-            self.attack_exp = attack_exp
-            self.attack_exp.run()
-            self.attack_results = self.attack_exp.results
+        attack_exp.run()
+        results = attack_exp.results
+
+        if subfolder not in self.all_results:
+            self.all_results[subfolder] = {}
+        if 'attack' not in self.all_results[subfolder]:
+            self.all_results[subfolder]['attack'] = {}
+        self.all_results[subfolder]['attack']['results'] = results
+
+        if self.transfer_attack_model:
+            attack_exp.run_transfer()
+            transfer_results = attack_exp.transfer_results
+            self.all_results[subfolder]['attack']['transfer'] = transfer_results
 
         # in case this function gets called more than once
         self.attack_kwargs["train"] = train
@@ -447,54 +466,48 @@ class Experiment:
                 json.dumps(self.attack_exp.save_variables(), indent=4)
             )
 
-    def update_csv(self):
-        """
-        Add the results of this experiment to the experiments/experiment_{#}/logs.csv file.
-        """
-        assert self.model_eval_results is not None
+    def evaluate(self, attack, subfolder):
 
-        columns = ['timestamp', 'debug', 'name', 'experiment_number', 'dataset', 'model_type',
-                   'model_path', 'best_model_metric', 'quantization', 'prune_method',
-                   'prune_compression', 'finetune_epochs', 'attack_method', 'attack_kwargs',
-                   'email_verbose', 'gpu', 'save_one_checkpoint', 'seed', 'train_from_scratch',
-                   'train_kwargs', 'prune_kwargs', 'clean_train_acc1', 'clean_train_acc5',
-                   'clean_val_acc1', 'clean_val_acc5', 'model_size', 'model_size_nz',
-                   'compression_ratio', 'flops', 'flops_nz', 'theoretical_speedup', 'adv_acc1',
-                   'adv_acc5', 'transfer_model', 'transfer_attack_results']
+        a = Model_Evaluator(
+            model_type=self.model_type,
+            model_path=self.model_path,
+            dataset=self.dataset,
+            gpu=self.gpu,
+            seed=self.seed,
+            dl_kwargs=self.train_kwargs['dl_kwargs'],
+            debug=self.debug,
+            attack_method=self.attack_method,
+            attack_kwargs=self.attack_kwargs,
+            quantized=self.quantized,
+            surrogate_model_path = self.pre_quantized_model,
+        )
+        model_eval_results = a.run(attack=attack)
 
-        results = {x: None for x in columns}
+        if subfolder not in self.all_results:
+            self.all_results[subfolder] = {}
+        self.all_results[subfolder].update(model_eval_results)
 
+    def save_results(self):
+        all_info = {**self.all_results, **json.loads(self.params)}
         timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-        results["timestamp"] = timestamp
-        results.update(json.loads(self.save_variables(write=False)))
+        params_path = self.paths["model"] / f"experiment_results_{timestamp}.json"
 
-        model_eval_results = copy.deepcopy(self.model_eval_results)
-        if "adv_results" in self.model_eval_results.keys():
-            # flatten model_eval_results
-            adv_results = model_eval_results.pop("adv_results")
-            model_eval_results["adv_acc1"] = adv_results["adv_acc1"]
-            model_eval_results["adv_acc5"] = adv_results["adv_acc5"]
-        elif self.attack_results is not None:
-            adv_results = {"adv_acc1": self.attack_results["adv_acc1"],
-                           "adv_acc5": self.attack_results["adv_acc5"]}
-            model_eval_results.update(adv_results)
+        previous_results_file = find_recent_file(
+            folder=self.paths['model'],
+            prefix="experiment_results_"
+        )
+        if isinstance(previous_results_file, Path):
+            logger.info(f"Combining results with previous results file: \n{previous_results_file}")
+            with open(previous_results_file, 'r') as file:
+                previous_results = json.load(file)
+            previous_results.update(all_info)
+            all_info = previous_results
 
-        results.update(model_eval_results)
-
-        if self.transfer_results:
-            results["transfer_model"] = str(self.transfer_attack_exp.transfer_model_path)
-            results["transfer_attack_results"] = self.transfer_results
-
-        path = self.paths["logs.csv"]
-        if not path.exists():
-            with open(path, 'w') as file:
-                writer = csv.DictWriter(file, fieldnames=results.keys(), lineterminator='\n')
-                writer.writeheader()
-        with open(path, 'a') as file:
-            writer = csv.DictWriter(file, fieldnames=results.keys(), lineterminator='\n')
-            writer.writerow(results)
-
-        self.all_results = results
+        default = lambda x: "json encode error"
+        params = json.dumps(all_info, skipkeys=True, indent=4, default=default)
+        with open(params_path, "w") as file:
+            file.write(params)
+        return params
 
 
 def check_folder_structure(
@@ -526,22 +539,25 @@ def check_folder_structure(
         experiments/
             # high level experiment folders
             experiment1/
-                VGG/
+                resnet20/
                     cifar10/
                     # low level experiment folders (model folders)
-                        vgg_<pruning_method>_<compression>_<finetuning_iterations>/
-                            shrinkbench folder generated for training/
-                            shrinkbench folder generated for pruning/
+                        resnet20_<pruning_method>_<compression>_<finetuning_iterations>/
+                            train/
                                 attacks/
                                     <attack_method>/
                                         transfer_attacks/
                                         images/
                                         train_attack_results-*.json
+                            prune/
+                                attacks/
+                            quantize/
+                                attacks/
                             experiment_params.json
                         ...
-                ResNet20/
-                GoogLeNet/
-                MobileNet/
+                vgg_bn_drop/
+                googlenet/
+                mobilenet_v2/
                 # csv to store high level results of all experiments
                 logs.csv
             experiment2/
@@ -553,7 +569,7 @@ def check_folder_structure(
     :param quantize: the modulus for quantization.
     :param prune_method: the strategy for the pruning algorithm.
     :param attack: the method for generating adversarial inputs.
-    :param finetune_epochs: number of training epochs after pruning/quantization.
+    :param finetune_epochs: number of training epochs after pruning.
     :param compression: the desired ratio of parameters in original to pruned model.
 
     :return: a tuple (dict, str).  The string is the name of the model folder.
@@ -586,17 +602,17 @@ def check_folder_structure(
     #   pruning/quantizing/finetuning for a certain model architecture
     model_folder_name = f"{model_type.lower()}"
 
-    if quantize:
-        model_folder_name += f"_{quantize}_quantization"
-    elif prune:
+    if prune:
         assert compression is not None and compression > 1, \
             "When pruning, must provide compression as a number > 1."
         model_folder_name += f"_{prune}_{compression}_compression"
         assert (
             isinstance(finetune_epochs, int) and finetune_epochs >= 0
         ), "Number of finetuning epochs must be provided when pruning"
-    if finetune_epochs:
-        model_folder_name += f"_{finetune_epochs}_finetune_iterations"
+        if finetune_epochs:
+            model_folder_name += f"_{finetune_epochs}_finetune_iterations"
+    # if quantize:
+    #     model_folder_name += f"_quantization"
 
     path_dict["model"] = path_dict["model_dataset"] / model_folder_name
 
@@ -604,9 +620,9 @@ def check_folder_structure(
     if path_dict["model"].exists():
         logger.warning(f"Path {path_dict['model']} already exists.")
 
-    if attack and "model" in path_dict:
-        path_dict["attacks"] = path_dict["model"] / "attacks"
-        path_dict["attack"] = path_dict["attacks"] / attack
+    # if attack and "model" in path_dict:
+    #     path_dict["attacks"] = path_dict["model"] / "attacks"
+    #     path_dict["attack"] = path_dict["attacks"] / attack
 
     for folder_name in path_dict.keys():
         if not path_dict[folder_name].exists():

@@ -160,6 +160,18 @@ def generate_permutations(list_args: dict) -> list:
     return [dict(zip(list_args, v)) for v in product(*list_args.values())]
 
 
+def find_recent_file(folder, prefix):
+    """Find the most recent file in a folder that starts with a certain prefix."""
+    folder = Path(folder)
+    if not folder.exists():
+        return -1
+    files_with_prefix = list(folder.glob(f"{prefix}*"))
+    if len(files_with_prefix) == 0:
+        # no files found
+        return -1
+    return max(files_with_prefix, key=lambda x: x.stat().st_ctime)
+
+
 if __name__ == "__main__":
     print(f"Testing on module {Path.cwd()}")
     example =     {
