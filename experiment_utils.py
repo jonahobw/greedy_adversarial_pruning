@@ -100,7 +100,7 @@ def email(
             server.login(sender, pw)
             server.sendmail(sender, reciever, message.as_string())
             server.quit()
-    except SMTPException as e:
+    except Exception as e:
         logger.warning("Error while trying to send email: \n%s", e)
 
 def timer(time_in_s):

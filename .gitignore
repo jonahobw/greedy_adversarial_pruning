@@ -1,6 +1,7 @@
 datasets/
 experiments/
 test_code/
+plots/
 
 email_pw.txt
 testing.py
