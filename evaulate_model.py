@@ -1,3 +1,6 @@
+"""
+Model evaluation utilities.
+"""
 import copy
 import json
 import pathlib
@@ -34,13 +37,13 @@ class Model_Evaluator(DNNExperiment):
         model_path,
         dataset="CIFAR10",
         gpu=None,
-        seed: int=None,
+        seed: int = None,
         dl_kwargs: {} = None,
         debug=None,
         attack_method="pgd",
         attack_kwargs=None,
         quantized=False,
-        surrogate_model_path =None,
+        surrogate_model_path=None,
     ):
         super().__init__(seed=seed)
         if seed:
@@ -121,7 +124,7 @@ class Model_Evaluator(DNNExperiment):
         if not self.quantized:
             x, y = x.to(self.device), y.to(self.device)
         else:
-            x, y = x.to('cpu'), y.to('cpu')
+            x, y = x.to("cpu"), y.to("cpu")
 
         # FLOPS
         ops, ops_nz = flops(self.model, x, quantized=self.quantized)
@@ -159,8 +162,10 @@ class Model_Evaluator(DNNExperiment):
             if not self.quantized:
                 x_adv = attacks[self.attack_method](self.model, x, **self.attack_kwargs)
             else:
-                x_adv = attacks[self.attack_method](self.surrogate_model, x, **self.attack_kwargs)
-                x, x_adv, y = x.to('cpu'), x_adv.to('cpu'), y.to('cpu')
+                x_adv = attacks[self.attack_method](
+                    self.surrogate_model, x, **self.attack_kwargs
+                )
+                x, x_adv, y = x.to("cpu"), x_adv.to("cpu"), y.to("cpu")
             y_pred = self.model(x)  # model prediction on clean examples
             y_pred_adv = self.model(x_adv)  # model prediction on adversarial examples
 

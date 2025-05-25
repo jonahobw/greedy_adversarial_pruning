@@ -6,6 +6,7 @@ plots/
 email_pw.txt
 testing.py
 temp_config.yaml
+.DS_Store
 
 
 # Byte-compiled / optimized / DLL files

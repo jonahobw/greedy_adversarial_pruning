@@ -1,4 +1,9 @@
-"""Downloads the CIFAR10 dataset to <current working dir>/datasets/CIFAR10"""
+"""
+Automates downloading and preparing the CIFAR10 dataset for GAP experiments.
+
+Ensures the dataset is available in the expected directory structure for training
+and evaluation.
+"""
 
 from pathlib import Path
 from torchvision import datasets

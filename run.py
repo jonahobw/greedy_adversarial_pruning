@@ -1,4 +1,4 @@
-"""Run experiments based off of an experiments.json config file."""
+"""Run experiments based off of the config.yaml config file."""
 
 # pylint: disable=import-error, unspecified-encoding, invalid-name
 import json
@@ -16,7 +16,8 @@ from shrinkbench.util import OnlineStats
 from experiments import Experiment
 from experiment_utils import Email_Sender, timer, generate_permutations
 
-logger = logging.getLogger('run')
+logger = logging.getLogger("run")
+
 
 def run_experiments(filename: str = None) -> None:
     """Run the experiments described in the config file."""
@@ -30,8 +31,10 @@ def run_experiments(filename: str = None) -> None:
     with open(path, "r") as file:
         args = yaml.safe_load(file)
 
-    common_args = args['common_args']
-    debug = not common_args['debug'] == None  # used to determine whether or not to save yaml file
+    common_args = args["common_args"]
+    debug = (
+        not common_args["debug"] == None
+    )  # used to determine whether or not to save yaml file
 
     # this variable gets passed to Experiment class, it is overwritten to a valid email sender
     # if valid email credentials are given in the config file.
@@ -83,19 +86,23 @@ def run_experiments(filename: str = None) -> None:
                     f"{estimated_time_remaining}\n\n"
                     f"{e.params}\n"
                     f"Results:\n"
-                    f"{json.dumps(e.all_results, indent=4)}")
+                    f"{json.dumps(e.all_results, indent=4)}",
+                )
 
         except Exception as e:
             tb = traceback.format_exc()
             if email_fn is not None:
-                email_fn("PROGRAM CRASHED", f"{tb}\n\n{json.dumps(experiment_args, indent=4)}")
+                email_fn(
+                    "PROGRAM CRASHED",
+                    f"{tb}\n\n{json.dumps(experiment_args, indent=4)}",
+                )
             raise e
 
     if email_fn is not None:
         email_fn(
             "All Experiments Concluded.",
             f"Total time ({num_experiments} experiments @ {timer(experiment_time.mean)} per "
-            f"experiment): {timer(num_experiments * experiment_time.mean)}"
+            f"experiment): {timer(num_experiments * experiment_time.mean)}",
         )
 
     if not debug:
@@ -104,7 +111,7 @@ def run_experiments(filename: str = None) -> None:
 
 
 def save_yaml(path):
-    save_dir = Path.cwd() / 'experiments' / 'yaml'
+    save_dir = Path.cwd() / "experiments" / "yaml"
     save_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     save_filename = f"{timestamp}.yaml"
@@ -217,8 +224,12 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('-file', required=False,
-                        default='config.yaml', help='.yaml file with configuration')
+    parser.add_argument(
+        "-file",
+        required=False,
+        default="config.yaml",
+        help=".yaml file with configuration",
+    )
 
     args = parser.parse_args()
     run_experiments(args.file)

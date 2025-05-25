@@ -1,4 +1,9 @@
-"""Functions for managing DNNs"""
+"""
+Model management utilities.
+
+Provides functions for hyperparameter selection, best checkpoint retrieval,
+and model architecture handling.
+"""
 
 # pylint: disable=invalid-name
 
@@ -31,7 +36,7 @@ def best_model(path: Path, metric: str = None):
         if "acc" in metric:
             best_epoch = int(df[df[metric] == df[metric].max()]["epoch"].iloc[0])
     else:
-        best_epoch = int(df['epoch'].max())
+        best_epoch = int(df["epoch"].max())
 
     return path / "checkpoints" / f"checkpoint-{best_epoch}.pt"
 
@@ -137,10 +142,12 @@ def get_lr_schedule(
     return lr_schedule
 
 
-if __name__ == '__main__':
-    logs_path = r'C:\Users\Jonah\Desktop\Jonah\0Grad_1\Research\code\aicas\experiments\experiment_0' \
-                r'\googlenet\CIFAR10\googlenet_GlobalMagGrad_2_compression_40_finetune_iterations' \
-                r'\20211101-111936-I0Y6-8bd05137846f1a27442e8665fcd4d428'
+if __name__ == "__main__":
+    logs_path = (
+        r"C:\Users\Jonah\Desktop\Jonah\0Grad_1\Research\code\aicas\experiments\experiment_0"
+        r"\googlenet\CIFAR10\googlenet_GlobalMagGrad_2_compression_40_finetune_iterations"
+        r"\20211101-111936-I0Y6-8bd05137846f1a27442e8665fcd4d428"
+    )
 
     a = best_model(logs_path)
     print(a)

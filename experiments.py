@@ -1,5 +1,8 @@
 """
-Run experiments that train, prune and finetune or quantize, and attack a DNN.
+Main experiment orchestration.
+
+Defines the Experiment class to manage training, pruning (including GAP), quantization,
+and adversarial evaluation of deep neural networks as described in the GAP paper.
 """
 
 # pylint: disable=import-error, too-many-instance-attributes, too-many-arguments
@@ -15,7 +18,12 @@ from typing import Callable
 import datetime
 
 import numpy as np
-from shrinkbench.experiment import TrainingExperiment, PruningExperiment, AttackExperiment, QuantizeExperiment
+from shrinkbench.experiment import (
+    TrainingExperiment,
+    PruningExperiment,
+    AttackExperiment,
+    QuantizeExperiment,
+)
 from nets import get_hyperparameters, best_model
 from evaulate_model import Model_Evaluator
 from experiment_utils import format_path, find_recent_file
@@ -47,10 +55,10 @@ class Experiment:
         only_attack: bool = False,
         transfer_attack_model: str = None,
         email: Callable = None,
-        email_verbose: bool=False,
+        email_verbose: bool = False,
         gpu: int = None,
         debug: int = False,
-        save_one_checkpoint: bool=False,
+        save_one_checkpoint: bool = False,
         seed: int = None,
         train_kwargs: {} = None,
     ):
@@ -116,8 +124,12 @@ class Experiment:
         self.only_attack = only_attack
         if self.only_attack:
             assert resume, "Resume must be set to True when only_attack is set to True."
-            assert model_path is not None, "Model path must be provided when only_attack is set to True."
-            assert transfer_attack_model is not None, "Transfer model must be provided when only_attack is set to True."
+            assert (
+                model_path is not None
+            ), "Model path must be provided when only_attack is set to True."
+            assert (
+                transfer_attack_model is not None
+            ), "Transfer model must be provided when only_attack is set to True."
         self.save_one_checkpoint = save_one_checkpoint
         self.seed = seed
         self.transfer_attack_model = format_path(transfer_attack_model)
@@ -133,7 +145,7 @@ class Experiment:
             model_type, debug=debug
         )
         if train_kwargs is not None:
-            self.train_kwargs['train_kwargs'].update(train_kwargs)
+            self.train_kwargs["train_kwargs"].update(train_kwargs)
 
         self.gpu = gpu
         if self.gpu is not None:
@@ -172,30 +184,40 @@ class Experiment:
 
         if self.model_path:
             m_path = str(self.model_path)
-            sep = '\\' if '\\' in m_path else '/'
+            sep = "\\" if "\\" in m_path else "/"
 
             if self.model_type:
                 if self.model_type not in m_path:
-                    raise ValueError(f"Provided model type {self.model_type} but provided model path"
-                                     f"\n{self.model_path} does not include this model_type.")
+                    raise ValueError(
+                        f"Provided model type {self.model_type} but provided model path"
+                        f"\n{self.model_path} does not include this model_type."
+                    )
             else:
-                self.model_type = m_path[m_path.find(f"experiment_{self.experiment_number}"):].split(sep)[1]
+                self.model_type = m_path[
+                    m_path.find(f"experiment_{self.experiment_number}") :
+                ].split(sep)[1]
 
             if self.dataset:
                 if self.dataset not in m_path:
-                    raise ValueError(f"Provided dataset {self.dataset} but provided model path"
-                                     f"\n{self.model_path} does not include this dataset.")
+                    raise ValueError(
+                        f"Provided dataset {self.dataset} but provided model path"
+                        f"\n{self.model_path} does not include this dataset."
+                    )
             else:
-                self.dataset =  m_path[m_path.find(self.model_type):].split(sep)[1]
+                self.dataset = m_path[m_path.find(self.model_type) :].split(sep)[1]
 
             if self.resume:
 
                 if self.experiment_number:
                     if f"experiment_{self.experiment_number}" not in m_path:
-                        raise ValueError(f"Provided experiment number {self.experiment_number} but provided model path"
-                                         f"\n{self.model_path} does not include this experiment number.")
+                        raise ValueError(
+                            f"Provided experiment number {self.experiment_number} but provided model path"
+                            f"\n{self.model_path} does not include this experiment number."
+                        )
                 else:
-                    experiment_number = int(m_path[m_path.find("experiment_"):].split("_")[1].split(sep)[0])
+                    experiment_number = int(
+                        m_path[m_path.find("experiment_") :].split("_")[1].split(sep)[0]
+                    )
 
                 already_pruned = False
 
@@ -203,8 +225,10 @@ class Experiment:
                     # only throw an error if there is a different compression already applied.
                     if "compression" in m_path:
                         if f"{self.prune_compression}_compression" not in m_path:
-                            raise ValueError(f"Provided pruning compression {self.prune_compression} but provided model path"
-                                             f"\n{self.model_path} does not include this prune compression.")
+                            raise ValueError(
+                                f"Provided pruning compression {self.prune_compression} but provided model path"
+                                f"\n{self.model_path} does not include this prune compression."
+                            )
                         else:
                             already_pruned = True
                 else:
@@ -218,49 +242,79 @@ class Experiment:
                     # only throw an error if there is a different pruning already applied
                     #   (checked using already_pruned variable)
                     if self.prune_method not in m_path and already_pruned:
-                        raise ValueError(f"Provided pruning method {self.prune_method} but provided model path"
-                                         f"\n{self.model_path} does not include this pruning method.")
+                        raise ValueError(
+                            f"Provided pruning method {self.prune_method} but provided model path"
+                            f"\n{self.model_path} does not include this pruning method."
+                        )
                 else:
                     if self.prune_compression:
-                        self.prune_method = m_path[:m_path.find(f"{self.prune_compression}_compression")].split("_")[-2]
+                        self.prune_method = m_path[
+                            : m_path.find(f"{self.prune_compression}_compression")
+                        ].split("_")[-2]
                     else:
                         self.prune_method = None
 
                 if self.finetune_epochs:
                     # only throw an error if there is a different finetuning already applied
                     #   (checked using already_pruned variable)
-                    if f"{self.finetune_epochs}_finetune_iterations" not in m_path and already_pruned:
-                        raise ValueError(f"Provided finetune epochs {self.finetune_epochs} but provided model path"
-                                         f"\n{self.model_path} does not include this finetune_epochs.")
+                    if (
+                        f"{self.finetune_epochs}_finetune_iterations" not in m_path
+                        and already_pruned
+                    ):
+                        raise ValueError(
+                            f"Provided finetune epochs {self.finetune_epochs} but provided model path"
+                            f"\n{self.model_path} does not include this finetune_epochs."
+                        )
                 else:
                     if self.prune_method:
-                        self.finetune_epochs = int(m_path[:m_path.find("finetune")].split("_")[-2])
+                        self.finetune_epochs = int(
+                            m_path[: m_path.find("finetune")].split("_")[-2]
+                        )
                     else:
                         self.finetune_epochs = None
 
-
         return check_folder_structure(
-                    experiment_number=self.experiment_number,
-                    dataset=self.dataset,
-                    model_type=self.model_type,
-                    quantize=self.quantization,
-                    prune=self.prune_method,
-                    attack=self.attack_method,
-                    finetune_epochs=self.finetune_epochs,
-                    compression=self.prune_compression,
-                )
+            experiment_number=self.experiment_number,
+            dataset=self.dataset,
+            model_type=self.model_type,
+            quantize=self.quantization,
+            prune=self.prune_method,
+            attack=self.attack_method,
+            finetune_epochs=self.finetune_epochs,
+            compression=self.prune_compression,
+        )
 
     def save_variables(self, write=True) -> None:
         """Save experiment parameters to a file in this experiment's folder"""
 
         timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
         params_path = self.paths["model"] / f"experiment_params_{timestamp}.json"
-        variables = ["name", "experiment_number", "dataset", "model_type", "model_path",
-                     "best_model_metric", "quantization", "prune_method", "prune_compression",
-                     "finetune_epochs", "attack_method", "attack_kwargs", "email_verbose",
-                     "gpu", "debug", "save_one_checkpoint", "seed", "train_from_scratch",
-                     "train_kwargs", "prune_kwargs", "dataset", "skip_attack",
-                     "only_attack", "transfer_attack_model"]
+        variables = [
+            "name",
+            "experiment_number",
+            "dataset",
+            "model_type",
+            "model_path",
+            "best_model_metric",
+            "quantization",
+            "prune_method",
+            "prune_compression",
+            "finetune_epochs",
+            "attack_method",
+            "attack_kwargs",
+            "email_verbose",
+            "gpu",
+            "debug",
+            "save_one_checkpoint",
+            "seed",
+            "train_from_scratch",
+            "train_kwargs",
+            "prune_kwargs",
+            "dataset",
+            "skip_attack",
+            "only_attack",
+            "transfer_attack_model",
+        ]
         params = {
             x: str(getattr(self, x))
             if isinstance(getattr(self, x), Path)
@@ -281,34 +335,38 @@ class Experiment:
         Checks if the experiment has already been trained, pruned, or quantized
         :return:
         """
-        subfolders = [x.name for x in self.paths['model'].iterdir() if x.is_dir()]
+        subfolders = [x.name for x in self.paths["model"].iterdir() if x.is_dir()]
 
-        return 'train' in subfolders, 'prune' in subfolders, 'quantize' in subfolders
+        return "train" in subfolders, "prune" in subfolders, "quantize" in subfolders
 
     def run(self) -> None:
         """Train, prune and finetune or quantize, and attack a DNN."""
         self.email(f"Experiment started for {self.name}", self.params)
 
-        self.already_trained, self.already_pruned, self.already_quantized = self.check_already_done()
+        (
+            self.already_trained,
+            self.already_pruned,
+            self.already_quantized,
+        ) = self.check_already_done()
 
         if self.train_from_scratch:
             if not self.only_attack and not self.already_trained:
                 self.train()
-                self.evaluate(attack=False, subfolder='train')
+                self.evaluate(attack=False, subfolder="train")
             if self.attack_method and not self.skip_attack:
-                self.attack(subfolder='train')
+                self.attack(subfolder="train")
         if self.prune_method:
             if not self.only_attack and not self.already_pruned:
                 self.prune()
-                self.evaluate(attack=False, subfolder='prune')
+                self.evaluate(attack=False, subfolder="prune")
             if self.attack_method and not self.skip_attack:
-                self.attack(subfolder='prune')
+                self.attack(subfolder="prune")
         if self.quantization:
             if not self.only_attack and not self.already_quantized:
                 self.quantize()
-                self.evaluate(attack=False, subfolder='quantize')
+                self.evaluate(attack=False, subfolder="quantize")
             if self.attack_method and not self.skip_attack:
-                self.attack(subfolder='quantize')
+                self.attack(subfolder="quantize")
 
         results = self.save_results()
 
@@ -327,8 +385,8 @@ class Experiment:
             path=str(self.paths["model"]),
             checkpoint_metric=self.best_model_metric,
             debug=self.debug,
-            save_one_checkpoint = self.save_one_checkpoint,
-            seed = self.seed,
+            save_one_checkpoint=self.save_one_checkpoint,
+            seed=self.seed,
             **self.train_kwargs,
         )
         self.train_exp.run()
@@ -387,9 +445,9 @@ class Experiment:
             model_path=self.model_path,
             model_type=self.model_type,
             dataset=self.dataset,
-            dl_kwargs=self.train_kwargs['dl_kwargs'],
+            dl_kwargs=self.train_kwargs["dl_kwargs"],
             train=True,
-            path=self.paths['model'],
+            path=self.paths["model"],
             gpu=self.gpu,
             seed=self.seed,
             debug=self.debug,
@@ -409,13 +467,20 @@ class Experiment:
         :param subfolder: the subfolder to save to.
         """
 
-        save_folder = self.paths['model'] / subfolder
+        save_folder = self.paths["model"] / subfolder
 
-        default_pgd_args = {"eps": 2 / 255, "eps_iter": 0.001, "nb_iter": 10, "norm": np.inf}
+        default_pgd_args = {
+            "eps": 2 / 255,
+            "eps_iter": 0.001,
+            "nb_iter": 10,
+            "norm": np.inf,
+        }
 
-        train = self.attack_kwargs.pop('train')
+        train = self.attack_kwargs.pop("train")
         default_pgd_args.update(**self.attack_kwargs)
-        logger.info(f"Attacking with parameters:\n{json.dumps(default_pgd_args, indent=4)}")
+        logger.info(
+            f"Attacking with parameters:\n{json.dumps(default_pgd_args, indent=4)}"
+        )
 
         assert self.model_path is not None, (
             "Either a path to a trained model must be provided or training parameters must be "
@@ -430,12 +495,14 @@ class Experiment:
             model_path=self.model_path,
             model_type=self.model_type,
             dataset=self.dataset,
-            dl_kwargs=self.train_kwargs['dl_kwargs'],
+            dl_kwargs=self.train_kwargs["dl_kwargs"],
             train=train,
             attack=self.attack_method,
             attack_params=default_pgd_args,
             path=save_folder,
-            transfer_model_path=str(self.transfer_attack_model) if self.transfer_attack_model else None,
+            transfer_model_path=str(self.transfer_attack_model)
+            if self.transfer_attack_model
+            else None,
             gpu=self.gpu,
             seed=self.seed,
             debug=self.debug,
@@ -448,14 +515,14 @@ class Experiment:
 
         if subfolder not in self.all_results:
             self.all_results[subfolder] = {}
-        if 'attack' not in self.all_results[subfolder]:
-            self.all_results[subfolder]['attack'] = {}
-        self.all_results[subfolder]['attack']['results'] = results
+        if "attack" not in self.all_results[subfolder]:
+            self.all_results[subfolder]["attack"] = {}
+        self.all_results[subfolder]["attack"]["results"] = results
 
         if self.transfer_attack_model:
             attack_exp.run_transfer()
             transfer_results = attack_exp.transfer_results
-            self.all_results[subfolder]['attack']['transfer'] = transfer_results
+            self.all_results[subfolder]["attack"]["transfer"] = transfer_results
 
         # in case this function gets called more than once
         self.attack_kwargs["train"] = train
@@ -463,7 +530,7 @@ class Experiment:
         if self.email_verbose:
             self.email(
                 f"{self.attack_method} attack on {self.model_type} Concluded.",
-                json.dumps(self.attack_exp.save_variables(), indent=4)
+                json.dumps(self.attack_exp.save_variables(), indent=4),
             )
 
     def evaluate(self, attack, subfolder):
@@ -474,12 +541,12 @@ class Experiment:
             dataset=self.dataset,
             gpu=self.gpu,
             seed=self.seed,
-            dl_kwargs=self.train_kwargs['dl_kwargs'],
+            dl_kwargs=self.train_kwargs["dl_kwargs"],
             debug=self.debug,
             attack_method=self.attack_method,
             attack_kwargs=self.attack_kwargs,
             quantized=self.quantized,
-            surrogate_model_path = self.pre_quantized_model,
+            surrogate_model_path=self.pre_quantized_model,
         )
         model_eval_results = a.run(attack=attack)
 
@@ -493,12 +560,13 @@ class Experiment:
         params_path = self.paths["model"] / f"experiment_results_{timestamp}.json"
 
         previous_results_file = find_recent_file(
-            folder=self.paths['model'],
-            prefix="experiment_results_"
+            folder=self.paths["model"], prefix="experiment_results_"
         )
         if isinstance(previous_results_file, Path):
-            logger.info(f"Combining results with previous results file: \n{previous_results_file}")
-            with open(previous_results_file, 'r') as file:
+            logger.info(
+                f"Combining results with previous results file: \n{previous_results_file}"
+            )
+            with open(previous_results_file, "r") as file:
                 previous_results = json.load(file)
             previous_results.update(all_info)
             all_info = previous_results
@@ -603,8 +671,9 @@ def check_folder_structure(
     model_folder_name = f"{model_type.lower()}"
 
     if prune:
-        assert compression is not None and compression > 1, \
-            "When pruning, must provide compression as a number > 1."
+        assert (
+            compression is not None and compression > 1
+        ), "When pruning, must provide compression as a number > 1."
         model_folder_name += f"_{prune}_{compression}_compression"
         assert (
             isinstance(finetune_epochs, int) and finetune_epochs >= 0
@@ -628,7 +697,9 @@ def check_folder_structure(
         if not path_dict[folder_name].exists():
             path_dict[folder_name].mkdir(parents=True, exist_ok=True)
 
-    path_dict["logs.csv"] = path_dict["experiment"] / f"experiment_{experiment_number}_logs.csv"
+    path_dict["logs.csv"] = (
+        path_dict["experiment"] / f"experiment_{experiment_number}_logs.csv"
+    )
 
     # set environment variable to be used by shrinkbench
     os.environ["DATAPATH"] = str(path_dict["datasets"])

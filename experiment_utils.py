@@ -1,4 +1,9 @@
-"""Utility functions including email."""
+"""
+Utility functions for experiment management.
+
+Includes email notification tools, parameter permutation generators, and other
+helpers for experiment orchestration.
+"""
 
 # pylint: disable=too-many-arguments, invalid-name, too-few-public-methods
 import copy
@@ -23,7 +28,7 @@ class Email_Sender:
         reciever: str = None,
         pw: str = None,
         send: bool = True,
-        **kwargs
+        **kwargs,
     ) -> None:
         """Store email params."""
 
@@ -43,12 +48,12 @@ class Email_Sender:
         else:
             self.email = self._email
 
-    def retrieve_pw(self, file: str=None) -> str:
+    def retrieve_pw(self, file: str = None) -> str:
         """Retrieves the gmail password from a file."""
 
         if file is None:
             return None
-        with open(Path()/file, 'r') as pw_file:
+        with open(Path() / file, "r") as pw_file:
             pw = pw_file.read()
         return pw
 
@@ -103,10 +108,11 @@ def email(
     except Exception as e:
         logger.warning("Error while trying to send email: \n%s", e)
 
+
 def timer(time_in_s):
     hours, rem = divmod(time_in_s, 3600)
     minutes, seconds = divmod(rem, 60)
-    return "{:0>2}:{:0>2}:{:0>2}".format(int(hours),int(minutes),int(seconds))
+    return "{:0>2}:{:0>2}:{:0>2}".format(int(hours), int(minutes), int(seconds))
 
 
 def format_path(path=None):
@@ -174,11 +180,12 @@ def find_recent_file(folder, prefix):
 
 if __name__ == "__main__":
     print(f"Testing on module {Path.cwd()}")
-    example =     {
+    example = {
         "model_type": ["vgg_bn_drop", "resnet20"],
         "prune_method": ["RandomPruning"],
-        "finetune_iterations": [10, 20, 40]
+        "finetune_iterations": [10, 20, 40],
     }
     a = generate_permutations(example)
     import json
+
     print(json.dumps(a, indent=4))
