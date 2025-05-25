@@ -16,6 +16,17 @@ from experiment_utils import find_recent_file
 
 
 def flatten_dict(d, parent_key="", sep="_"):
+    """
+    Recursively flattens a nested dictionary.
+
+    Args:
+        d (dict): The dictionary to flatten.
+        parent_key (str): The base key string for recursion.
+        sep (str): Separator between parent and child keys.
+
+    Returns:
+        dict: Flattened dictionary with compound keys.
+    """
     items = []
     for k, v in d.items():
         new_key = parent_key + sep + k if parent_key else k
@@ -28,14 +39,17 @@ def flatten_dict(d, parent_key="", sep="_"):
 
 def read_json(path, prefix, vals=None, flat=True):
     """
-    Reads the latest file in path that starts with the prefix, returning a dictionary of the values.
+    Reads the latest JSON file in a directory with a given prefix and returns selected values.
 
-    :param path: folder path, the target file is the most recent file in this folder
-                named "<prefix>*.json"
-    :param vals: list of the values to read from the file.
-    :return: a dictionary of values from the latest experiment parameter file
+    Args:
+        path (str or Path): Directory to search for the file.
+        prefix (str): Prefix of the file to find.
+        vals (list, optional): Keys to extract from the JSON.
+        flat (bool): Whether to flatten nested dictionaries.
+
+    Returns:
+        dict: Dictionary of requested values from the JSON file.
     """
-
     params_file = find_recent_file(path, prefix)
     if params_file == -1:
         # no file found
@@ -51,15 +65,16 @@ def read_json(path, prefix, vals=None, flat=True):
 
 def read_experiment_params(path, vals=None, flat=True):
     """
-    Reads the latest experiment parameter file in path, and returns a dictionary of the values.
+    Reads the latest experiment parameter file in a directory.
 
-    :param path: folder path, the experiment parameter file is in this folder and is named
-            "experiment_params_<timestamp>.json"
-    :param vals: list of the values to read from the file.
-    :param flat: if true, then will flatten out nested dicts
-    :return: a dictionary of values from the latest experiment parameter file
+    Args:
+        path (str or Path): Directory containing the experiment parameter file.
+        vals (list, optional): Keys to extract from the file.
+        flat (bool): Whether to flatten nested dictionaries.
+
+    Returns:
+        dict: Dictionary of experiment parameters.
     """
-
     if vals is None:
         vals = [
             "debug",
@@ -84,14 +99,22 @@ def read_experiment_params(path, vals=None, flat=True):
             "prune_kwargs",
         ]
 
-    params = read_json(path=path, prefix="experiment_params", vals=vals, flat=flat)
-
-    return params
+    return read_json(path=path, prefix="experiment_params", vals=vals, flat=flat)
 
 
 def read_pruning_metrics(path, vals=None, flat=True):
-    if vals is None:
+    """
+    Reads pruning metrics from the most recent metrics JSON in the prune folder.
 
+    Args:
+        path (str or Path): Path to the experiment folder.
+        vals (list, optional): Keys to extract from the metrics file.
+        flat (bool): Whether to flatten nested dictionaries.
+
+    Returns:
+        dict: Dictionary of pruning metrics.
+    """
+    if vals is None:
         vals = [
             "size",
             "size_nz",
@@ -103,78 +126,62 @@ def read_pruning_metrics(path, vals=None, flat=True):
         ]
 
     prune_folder = str(Path(path) / "prune")
-    params = read_json(path=prune_folder, prefix="metrics", vals=vals, flat=flat)
-
-    # # rename args
-    # if "size" in params:
-    #     params["model_size"] = params["size"]
-    #     params.pop("size")
-    # else:
-    #     params["model_size"] = None
-    # if "size_nz" in params:
-    #     params["model_size_nz"] = params["size_nz"]
-    #     params.pop("size_nz")
-    # else:
-    #     params["model_size_nz"] = None
-
-    return params
+    return read_json(path=prune_folder, prefix="metrics", vals=vals, flat=flat)
 
 
 def read_attack_metrics(path, vals=None, flat=True, attack="pgd"):
+    """
+    Reads adversarial attack metrics from the most recent attack results JSON.
+
+    Args:
+        path (str or Path): Path to the experiment folder.
+        vals (list, optional): Keys to extract from the results file.
+        flat (bool): Whether to flatten nested dictionaries.
+        attack (str): Attack method name (e.g., 'pgd').
+
+    Returns:
+        dict: Dictionary of attack metrics.
+    """
     if vals is None:
         vals = ["results"]
     attack_folder = str(Path(path) / "attacks" / attack)
-    params = read_json(
+    return  read_json(
         path=attack_folder, prefix="train_attack_results", vals=vals, flat=flat
     )
-
-    # # format args
-    # if "results" in params:
-    #     if "adv_acc1" in params["results"]:
-    #         params["adv_acc1"] = params["results"]["adv_acc1"]
-    #     if "adv_acc5" in params["results"]:
-    #         params["adv_acc5"] = params["results"]["adv_acc5"]
-    #     params.pop("results")
-    # else:
-    #     params["adv_acc1"] = None
-    #     params["adv_acc5"] = None
-    #
-    # if flat:
-    #     params = flatten_dict(params)
-    return params
 
 
 def read_transfer_attack_metrics(path, vals=None, flat=True, attack="pgd"):
+    """
+    Reads transfer attack metrics from the most recent transfer attack results JSON.
+
+    Args:
+        path (str or Path): Path to the experiment folder.
+        vals (list, optional): Keys to extract from the results file.
+        flat (bool): Whether to flatten nested dictionaries.
+        attack (str): Attack method name (e.g., 'pgd').
+
+    Returns:
+        dict: Dictionary of transfer attack metrics.
+    """
     if vals is None:
         vals = ["transfer_results", "transfer_model_path"]
     attack_folder = str(Path(path) / "attacks" / attack / "transfer_attack")
-    params = read_json(
+    return read_json(
         path=attack_folder, prefix="train_attack_results", vals=vals, flat=flat
     )
 
-    # # format args
-    # if params"transfer_results" is not None:
-    #     if "transfer_runtime" in params["transfer_results"]:
-    #         params["transfer_results"].pop("transfer_runtime")
-    # elif params["transfer_results"] is None:
-    #     params["transfer_results"] = {
-    #                         "inputs_tested": None,
-    #                         "both_correct1": None,
-    #                         "both_correct5": None,
-    #                         "transfer_correct1": None,
-    #                         "transfer_correct5": None,
-    #                         "target_correct1": None,
-    #                         "target_correct5": None,
-    #                     }
-    #
-    # if flat:
-    #     params = flatten_dict(params)
-    return params
-
 
 def read_accuracy_results(path, vals=None):
-    """If model has been pruned, read from pruning logs, else from training logs."""
+    """
+    Reads accuracy results from the most recent logs in the prune or train folder.
 
+    Args:
+        path (str or Path): Path to the experiment folder.
+        vals (list, optional): Keys to extract from the logs file.
+
+    Returns:
+        dict: Dictionary of clean accuracy results.
+    """
     if vals is None:
         vals = ["train_acc1", "train_acc5", "val_acc1", "val_acc5"]
 
@@ -194,6 +201,15 @@ def read_accuracy_results(path, vals=None):
 
 
 def collect_one_experiment_data(path):
+    """
+    Collects all relevant metrics and parameters for a single experiment folder.
+
+    Args:
+        path (str or Path): Path to the experiment folder.
+
+    Returns:
+        dict: Aggregated results from experiment parameters, pruning, attack, transfer, and accuracy.
+    """
     experiment_params = read_experiment_params(path)
     pruning_metrics = read_pruning_metrics(path)
     attack_metrics = read_attack_metrics(
@@ -215,17 +231,33 @@ def collect_one_experiment_data(path):
 
 
 def find_experiment_folders(exp_folder, models, dataset="CIFAR10"):
+    """
+    Finds all experiment subfolders for a given set of models and dataset.
 
+    Args:
+        exp_folder (Path): Path to the experiment root folder.
+        models (list): List of model names.
+        dataset (str): Dataset name (default: 'CIFAR10').
+
+    Returns:
+        list: List of Path objects for each experiment folder.
+    """
     experiment_folders = []
-
     for model in models:
         model_path = exp_folder / model / dataset
         experiment_folders.extend(list(model_path.glob(f"{model}*")))
-
     return experiment_folders
 
 
 def generate_csv(experiment_number, models=None, timestamp=True):
+    """
+    Aggregates results from all experiment folders and writes them to a CSV file.
+
+    Args:
+        experiment_number (int): The experiment identifier.
+        models (list, optional): List of model names. Defaults to common models.
+        timestamp (bool): Whether to append a timestamp to the CSV filename.
+    """
     if models is None:
         models = ["resnet20", "googlenet", "vgg_bn_drop", "mobilenet_v2"]
 
@@ -249,12 +281,22 @@ def generate_csv(experiment_number, models=None, timestamp=True):
     with open(csv_path, "w") as file:
         writer = csv.DictWriter(file, fieldnames=headers.keys(), lineterminator="\n")
         writer.writeheader()
-
         for x in data:
             writer.writerow(x)
 
 
 def generate_csv_new_workflow(experiment_number, models=None, timestamp=True):
+    """
+    Aggregates results using the new workflow and writes them to a CSV file.
+
+    Args:
+        experiment_number (int): The experiment identifier.
+        models (list, optional): List of model names. Defaults to common models.
+        timestamp (bool): Whether to append a timestamp to the CSV filename.
+
+    Returns:
+        Path: Path to the generated CSV file.
+    """
     if models is None:
         models = ["resnet20", "googlenet", "vgg_bn_drop", "mobilenet_v2"]
 
@@ -284,7 +326,6 @@ def generate_csv_new_workflow(experiment_number, models=None, timestamp=True):
     with open(csv_path, "w") as file:
         writer = csv.DictWriter(file, fieldnames=headers.keys(), lineterminator="\n")
         writer.writeheader()
-
         for x in data:
             writer.writerow(x)
 
@@ -293,15 +334,16 @@ def generate_csv_new_workflow(experiment_number, models=None, timestamp=True):
 
 def fill_empty_csv(experiment, path=None):
     """
-    Fills in empty prune attack parameters and prune/quantized transfer attacks for
-    models which were not pruned.  The transfer attack results will simply be the identity
-    function.
+    Fills in empty prune attack parameters and transfer attacks for models which were not pruned.
+    The transfer attack results will simply be the identity function.
 
-    :param experiment:
-    :param path:
-    :return:
+    Args:
+        experiment (int): The experiment identifier.
+        path (Path, optional): Path to the CSV file. If None, finds the most recent.
+
+    Returns:
+        Path: Path to the new formatted CSV file.
     """
-
     experiment_folder = Path.cwd() / "experiments" / f"experiment_{experiment}"
 
     if path is None:
@@ -329,6 +371,7 @@ def fill_empty_csv(experiment, path=None):
         "attack_results_runtime",
     ]
 
+    # Fill missing prune_* columns with train_* values if not pruned
     df_train_scratch = df[df["prune_model_file_size"].isna()]
     for x in convert_results:
         df[f"prune_{x}"] = np.where(
@@ -344,9 +387,7 @@ def fill_empty_csv(experiment, path=None):
         ("attack_transfer_target_correct5", "attack_results_adv_acc5"),
     ]
 
-    # columns attack_transfer_transfer_model, attack_transfer_transfer_runtime, and
-    #   attack_transfer_inputs_tested are left blank
-
+    # Fill missing transfer attack columns for pruned/quantized models
     for prefix_empty, prefix_replace in [
         ("prune_", "train_"),
         ("quantize_", "quantize_"),
@@ -359,18 +400,21 @@ def fill_empty_csv(experiment, path=None):
             )
 
     new_csv = path.parent / f"formatted_{path.name}"
-    # with open(new_csv, 'w') as f:
     df.to_csv(new_csv, index=False)
     return new_csv
 
 
 def retrieve_formatted_csv_df(experiment, cols=None, regenerate=True):
     """
-    If regenerate is true, regenerates the files and removes old ones.
-    :param experiment:
-    :param cols:
-    :param replace:
-    :return:
+    Retrieves a formatted DataFrame for a given experiment, regenerating files if needed.
+
+    Args:
+        experiment (int): The experiment identifier.
+        cols (list, optional): Columns to include in the DataFrame.
+        regenerate (bool): Whether to regenerate the CSV files.
+
+    Returns:
+        pd.DataFrame: DataFrame with the requested columns.
     """
     experiment_folder = Path.cwd() / "experiments" / f"experiment_{experiment}"
     if not regenerate:
@@ -392,24 +436,16 @@ def retrieve_formatted_csv_df(experiment, cols=None, regenerate=True):
 
 def format_data_for_plot(experiment, metrics, pruning=None, models=None):
     """
-    Returns a tuple ({model: groupby dataframe}, {model: big dataframe})
+    Formats experiment data for plotting, returning grouped and ungrouped DataFrames.
 
-    The first item in the dict is for easy plotting, the second is for combining
-    with other experiments
+    Args:
+        experiment (int): The experiment identifier.
+        metrics (list): List of metric column names to include.
+        pruning (list, optional): List of pruning strategies.
+        models (list, optional): List of model names.
 
-    Can plot the groupby dataframe using
-
-    for pruning_strat, data in groupby_dataframe:
-        x_axis = data['prune_compression']
-        y_axis = data[metric]
-        label = pruning_strat
-        plt.plot(x_axis, y_axis, label=label)
-
-    :param experiment: which experiment to get the data from
-    :param metrics: list of columns which you want to plot on y axis.
-    :param pruning: list of pruning strategies on which collect data
-    :param models: list of models on which to collect data
-    :return:
+    Returns:
+        tuple: (grouped_data, ungrouped_data) where each is a dict by model name.
     """
     if not isinstance(metrics, list):
         metrics = [metrics]
@@ -451,10 +487,6 @@ def format_data_for_plot(experiment, metrics, pruning=None, models=None):
         df = df.sort_values("prune_compression")
         ungrouped_data[model] = df
         final_data[model] = df.groupby(["prune_method"])
-        # for key, group in a:
-        #     print(key)
-        #     print("\n\n\n")
-        #     print(group)
     return final_data, ungrouped_data
 
 
@@ -462,16 +494,16 @@ def format_multiple_experiment_data_for_plot(
     experiments, metrics, pruning=None, models=None
 ):
     """
-    Combines the data from multiple experiment runs into one result of the same format
-    as format_data_for_plot(), except that the metrics columns are the averages of the
-    results from each experiment, and there is an additional column for each metric which
-    is the standard deviation for that metric.
+    Combines data from multiple experiments for plotting, averaging metrics and computing std dev.
 
-    :param experiments:
-    :param metrics:
-    :param pruning:
-    :param models:
-    :return:
+    Args:
+        experiments (list): List of experiment identifiers.
+        metrics (list): List of metric column names to include.
+        pruning (list, optional): List of pruning strategies.
+        models (list, optional): List of model names.
+
+    Returns:
+        dict: Dictionary of DataFrames by model, with mean and std for each metric.
     """
     if not isinstance(experiments, list):
         experiments = [experiments]
@@ -489,14 +521,12 @@ def format_multiple_experiment_data_for_plot(
                 experiment=experiment_x, metrics=metrics, pruning=pruning, models=models
             )[1]
         )
-        a = 0
+        a = 0  # placeholder, not used
 
-    # combine model dataframes
+    # Combine model dataframes and compute mean/std
     model_dfs = {}
-
     for model in models:
         temp = pd.concat([x[model] for x in experiment_data])
-
         model_dfs[model] = (
             temp.groupby(
                 ["prune_method", "prune_compression"],
@@ -505,13 +535,11 @@ def format_multiple_experiment_data_for_plot(
             .agg({metrc: ["mean", "std"] for metrc in metrics})
             .sort_values("prune_compression")
         )
-
     return model_dfs
 
 
 if __name__ == "__main__":
-    # generate_csv_new_workflow(10)
-    # clean_prune_acc(10)
+    # Example: combine and format data from multiple experiments for plotting
     format_multiple_experiment_data_for_plot(
         experiments=[10, 11, 12],
         metrics=[
@@ -520,5 +548,6 @@ if __name__ == "__main__":
             "prune_attack_transfer_target_correct1",
         ],
     )
-    #'prune_attack_transfer_target_correct_1', 'quantize_attack_transfer_target_correct_1',
+    # Other metrics:
+    # 'quantize_attack_transfer_target_correct_1',
     # 'quantize_attack_results_adv_acc1'

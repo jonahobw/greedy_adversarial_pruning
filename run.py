@@ -1,4 +1,6 @@
-"""Run experiments based off of the config.yaml config file."""
+"""
+Run experiments based off of the config.yaml config file.
+"""
 
 # pylint: disable=import-error, unspecified-encoding, invalid-name
 import json
@@ -20,8 +22,12 @@ logger = logging.getLogger("run")
 
 
 def run_experiments(filename: str = None) -> None:
-    """Run the experiments described in the config file."""
+    """
+    Run the experiments described in the config file.
 
+    Args:
+        filename (str, optional): Path to the YAML config file. Defaults to 'config.yaml' in cwd.
+    """
     path = Path.cwd() / "config.yaml"
     if filename:
         path = Path.cwd() / filename
@@ -36,11 +42,11 @@ def run_experiments(filename: str = None) -> None:
         not common_args["debug"] == None
     )  # used to determine whether or not to save yaml file
 
-    # this variable gets passed to Experiment class, it is overwritten to a valid email sender
+    # This variable gets passed to Experiment class, it is overwritten to a valid email sender
     # if valid email credentials are given in the config file.
     email_fn = None
 
-    # whether or not to send emails once per experiment (done from this script) or
+    # Whether or not to send emails once per experiment (done from this script) or
     # more frequently (done from the Experiment class).  If this is present in the config
     # file, then this variable is overwritten.
     once_per_experiment = False
@@ -68,14 +74,14 @@ def run_experiments(filename: str = None) -> None:
             e.run()
 
             now = time.time()
-            # we just completed this experiment, hence the - 1 at the end
+            # We just completed this experiment, hence the - 1 at the end
             left = num_experiments - i - 1
             done_percent = "{:.0f}".format((i + 1) / num_experiments * 100)
             last_exp_time = now - since
             experiment_time.add(last_exp_time)
             estimated_time_remaining = timer(left * experiment_time.mean)
 
-            # handle email sending from this script rather than the Experiment class
+            # Handle email sending from this script rather than the Experiment class
             if email_fn is not None and once_per_experiment:
                 email_fn(
                     f"Experiment completed for {e.name}, "
@@ -106,11 +112,17 @@ def run_experiments(filename: str = None) -> None:
         )
 
     if not debug:
-        # save the yaml file to ./experiments/yaml/
+        # Save the yaml file to ./experiments/yaml/
         save_yaml(path)
 
 
 def save_yaml(path):
+    """
+    Save the YAML config file to the ./experiments/yaml/ directory with a timestamp.
+
+    Args:
+        path (Path): Path to the YAML file to save.
+    """
     save_dir = Path.cwd() / "experiments" / "yaml"
     save_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -124,9 +136,9 @@ def convert_experiment_list(args):
     Convert the experiment arguments passed from the config file to a flattened list of experiments.
 
     The config file allows for multiple experiments to be run by specifying a list of values for
-    any experiment parameter.  For example, this function will convert a config file with
-    experiment parameters as
+    any experiment parameter. This function expands all combinations into a list of experiment dicts.
 
+    Example:
     -   model_type: [vgg_bn_drop, resnet20]
         prune_method: [RandomPruning, GlobalMagWeight]
         prune_compression: 2
@@ -185,22 +197,18 @@ def convert_experiment_list(args):
         }
     ]
 
-    The config file allows for multiple
-
-    :param args: the dictionary resulting from parsing the config file.
-
-    :returns: a list of dictionaries, each of which represents the kwargs for 1 Experiment object.
+    Args:
+        args (list): List of experiment argument dictionaries from the config file.
+    Returns:
+        list: List of dictionaries, each representing the kwargs for one Experiment object.
     """
-
-    # list of dictionaries to return
+    # List of dictionaries to return
     all_experiment_params = []
 
     for experiment_args in args:
-
-        # dict of args which have a list
+        # Dict of args which have a list
         list_args = {}
-
-        # dict of args that do not have a list
+        # Dict of args that do not have a list
         common_args = {}
 
         for arg in experiment_args:
@@ -209,7 +217,7 @@ def convert_experiment_list(args):
             else:
                 common_args[arg] = experiment_args[arg]
 
-        # now create all permutations of the list_args:
+        # Now create all permutations of the list_args:
         permutations = generate_permutations(list_args)
 
         for permutation in permutations:

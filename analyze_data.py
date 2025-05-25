@@ -15,6 +15,16 @@ from collect_experiment_data import format_multiple_experiment_data_for_plot
 
 
 def experiment_csv(experiment_number, cols=None):
+    """
+    Load the most recent experiment CSV for a given experiment number.
+
+    Args:
+        experiment_number (int): The experiment identifier.
+        cols (list, optional): List of columns to load from the CSV.
+
+    Returns:
+        pd.DataFrame: DataFrame containing the requested columns from the experiment CSV.
+    """
     experiment_path = Path.cwd() / "experiments" / f"experiment_{experiment_number}"
     csv_file = find_recent_file(experiment_path, prefix="collected_results")
     return pd.read_csv(csv_file, usecols=cols)
@@ -22,15 +32,17 @@ def experiment_csv(experiment_number, cols=None):
 
 def plot(experiment_number, models=None, pruning=None):
     """
-    Plot a grid.
+    Plot a grid of metrics for a given experiment.
 
-    first row is the clean train acc by compression ratio, and each pruning strategy has a line,
-    and each model has a graph
-    second row is the adv train acc by compression ratio, and each pruning strategy has a line,
-    and each model has a graph
-    3rd row is the transfer train acc by compression ratio, and each pruning strategy has a line,
-    and each model has a graph
-    :return:
+    The grid consists of:
+        - First row: Clean train accuracy by compression ratio (one line per pruning strategy, one graph per model)
+        - Second row: Adversarial train accuracy by compression ratio
+        - Third row: Transfer train accuracy by compression ratio
+
+    Args:
+        experiment_number (int): The experiment identifier.
+        models (list, optional): List of model names to include. Defaults to common models.
+        pruning (list, optional): List of pruning strategies to include. Defaults to common strategies.
     """
     if models is None:
         models = ["resnet20", "googlenet", "vgg_bn_drop", "mobilenet_v2"]
@@ -70,6 +82,7 @@ def plot(experiment_number, models=None, pruning=None):
             df_0_compression_acc = df[df["name"] == model][metric].item()
             df = df[[metric, "prune_compression", "prune_method"]]
             temp = {metric: df_0_compression_acc, "prune_compression": 1}
+            # Add the unpruned (compression=1) baseline for each pruning strategy
             for prune_strat in pruning:
                 df = df.append({**temp, "prune_method": prune_strat}, ignore_index=True)
             df = df.sort_values("prune_compression")
@@ -92,18 +105,10 @@ def plot(experiment_number, models=None, pruning=None):
                 ax[j, i].xaxis.label.set_visible(False)
             ax[j, i].legend(prop={"size": 8})
 
-    # don't know why but these need to be here to get the labels
+    # Ensure y-axis labels are visible for all subplots
     for j in range(len(y_axis)):
         for i in range(len(models)):
             ax[j, i].yaxis.set_tick_params(labelleft=True)
-    plt.show()
-
-
-def simple_mean_std():
-    x = [1, 2, 3, 4]
-    y_mean = [1, 1.5, 1.75, 1.85]
-    y_std = [0.1, 0.2, 0.3, 0.4]
-    plt.errorbar(x, y_mean, yerr=[2 * x for x in y_std], fmt="o-")
     plt.show()
 
 
@@ -116,13 +121,17 @@ def plot_all_experiment_data(
     subplot has 1 line per pruning method.  The x axis is prune compression and
     the y axis is the metric.
 
-    :param metrics:
-    :param experiments:
-    :param models:
-    :param pruning:
-    :return:
-    """
+    Each subplot shows the average and (optionally) error bars for a metric, with one line per pruning method.
+    The x-axis is prune compression, and the y-axis is the metric.
 
+    Args:
+        metrics (list): List of metric column names to plot.
+        experiments (list, optional): List of experiment numbers to include. Defaults to [10, 11, 12].
+        models (list, optional): List of model names to include. Defaults to common models.
+        pruning (list, optional): List of pruning strategies to include. Defaults to common strategies.
+        error_bars (bool, optional): Whether to show error bars (std dev). Defaults to False.
+        save (str, optional): If provided, saves the plot to this filename in the 'plots' directory.
+    """
     metrics_mapping = {
         "prune_clean_val_acc1": {"y_ax": [0, 1], "label": "Clean Test Accuracy"},
         "quantize_clean_val_acc1": {"y_ax": [0, 1], "label": "Quantize Clean Accuracy"},
@@ -178,6 +187,7 @@ def plot_all_experiment_data(
         "GreedyPGDLayerMagGrad": "LayerGAP",
     }
 
+    # Aggregate and format data for plotting
     data = format_multiple_experiment_data_for_plot(
         experiments=experiments, metrics=metrics, pruning=pruning, models=models
     )
@@ -206,21 +216,13 @@ def plot_all_experiment_data(
                     ax[j, i].errorbar(
                         x, y, yerr=y_err, label=prune_mapping[prune_strat]
                     )
-                # ax[j, i].errorbar(x, y, yerr=y_err, label=prune_strat)
-                # ax[j, i].errorbar(x, y, yerr=y_err, fmt='o-', label=prune_strat)
             ax[j, i].set_xscale("log", base=2)
             ax[j, i].set_xticks(x)
             ax[j, i].xaxis.set_major_formatter(ScalarFormatter())
-            # if j == len(metrics) - 1:
-            # ax[j, i].xaxis.set_major_formatter(ScalarFormatter())
-            # else:
-            #     ax[j, i].xaxis.set_ticklabels([])
             if i == 0 and j == 0:
                 ax[j, i].legend(prop={"size": 10}, framealpha=0.0)
             if j == 0:
                 ax[j, i].set_title(model_mapping[model])
-                # ax[j, i].set_title(f"{model_mapping[model]}\n"
-                #                    f"{metrics_mapping[metric]['label']}")
             if j == len(metrics) - 1:
                 ax[j, i].set_xlabel("Prune Compression")
             if i == 0:
@@ -243,13 +245,16 @@ def plot_all_experiment_data_transpose(
     subplot has 1 line per pruning method.  The x axis is prune compression and
     the y axis is the metric.
 
-    :param metrics:
-    :param experiments:
-    :param models:
-    :param pruning:
-    :return:
-    """
+    Each subplot shows the average and (optionally) error bars for a metric, with one line per pruning method.
+    The x-axis is prune compression, and the y-axis is the metric.
 
+    Args:
+        metrics (list): List of metric column names to plot.
+        experiments (list, optional): List of experiment numbers to include. Defaults to [10, 11, 12].
+        models (list, optional): List of model names to include. Defaults to common models.
+        pruning (list, optional): List of pruning strategies to include. Defaults to common strategies.
+        error_bars (bool, optional): Whether to show error bars (std dev). Defaults to False.
+    """
     metrics_mapping = {
         "prune_clean_val_acc1": {"y_ax": [0, 1], "label": "Clean Test Accuracy"},
         "quantize_clean_val_acc1": {"y_ax": [0, 1], "label": "Quantize Clean Accuracy"},
@@ -305,6 +310,7 @@ def plot_all_experiment_data_transpose(
         "GreedyPGDLayerMagGrad": "LayerGAP",
     }
 
+    # Aggregate and format data for plotting
     data = format_multiple_experiment_data_for_plot(
         experiments=experiments, metrics=metrics, pruning=pruning, models=models
     )
@@ -348,19 +354,18 @@ def plot_all_experiment_data_transpose(
                 ax[i, j].set_xlabel("Prune Compression")
             # if j==0:
             #     ax[i, j].set_ylabel(metrics_mapping[metric]['label'])
-
     plt.show()
 
 
 if __name__ == "__main__":
     plt.style.use("ggplot")
 
-    # plot all clean accs
+    # Example usage: plot all clean accuracies
     plot_all_experiment_data(
         metrics=["prune_clean_val_acc1", "quantize_clean_val_acc1"],
     )
 
-    # plot all data with error bars
+    # Example usage: plot all data with error bars (transposed axes)
     plot_all_experiment_data_transpose(
         metrics=[
             "prune_clean_val_acc1",
@@ -370,7 +375,7 @@ if __name__ == "__main__":
         error_bars=True,
     )
 
-    # plot all data with error bars
+    # Example usage: plot all data with error bars
     plot_all_experiment_data(
         metrics=[
             "prune_clean_val_acc1",
@@ -381,7 +386,7 @@ if __name__ == "__main__":
         save="all_data.png",
     )
 
-    # plot without Layer GAP and with error bars:
+    # Example usage: plot without Layer GAP and with error bars
     plot_all_experiment_data(
         metrics=[
             "prune_clean_val_acc1",
@@ -399,7 +404,7 @@ if __name__ == "__main__":
         error_bars=True,
     )
 
-    # plot with Layer GAP and without error bars:
+    # Example usage: plot with Layer GAP and without error bars
     plot_all_experiment_data(
         metrics=[
             "prune_clean_val_acc1",
@@ -408,7 +413,7 @@ if __name__ == "__main__":
         ],
     )
 
-    # plot pruned robustness vs quantized robustness
+    # Example usage: plot pruned robustness vs quantized robustness
     plot_all_experiment_data(
         metrics=[
             "prune_clean_val_acc1",
@@ -417,7 +422,7 @@ if __name__ == "__main__":
         ],
     )
 
-    # plot pruned transfer vs quantized transfer
+    # Example usage: plot pruned transfer vs quantized transfer
     plot_all_experiment_data(
         metrics=[
             "prune_clean_val_acc1",

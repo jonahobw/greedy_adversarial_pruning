@@ -20,8 +20,9 @@ logger = logging.getLogger("utils")
 
 
 class Email_Sender:
-    """Stores email sender, reciever, and pw."""
-
+    """
+    Stores email sender, receiver, and password, and provides an email sending interface.
+    """
     def __init__(
         self,
         sender: str = None,
@@ -30,15 +31,22 @@ class Email_Sender:
         send: bool = True,
         **kwargs,
     ) -> None:
-        """Store email params."""
+        """
+        Store email parameters and set up the email sending function.
 
+        Args:
+            sender (str, optional): Email address of the sender.
+            reciever (str, optional): Email address of the receiver.
+            pw (str, optional): Path to file containing the sender's email password.
+            send (bool): Whether to actually send emails (default: True).
+        """
         self.sender = sender
         self.reciever = reciever
         self.pw = self.retrieve_pw(pw)
         self.send = send
         if self.send is not None:
             logger.info("Email settings: send set to %s", send)
-        # dummy function in case an argument is not provided:
+        # Dummy function in case an argument is not provided
         if None in (sender, reciever, pw):
             logger.warning(
                 "At least one of email sender, reciever, or pw was not"
@@ -49,8 +57,14 @@ class Email_Sender:
             self.email = self._email
 
     def retrieve_pw(self, file: str = None) -> str:
-        """Retrieves the gmail password from a file."""
+        """
+        Retrieves the gmail password from a file.
 
+        Args:
+            file (str, optional): Path to the file containing the password.
+        Returns:
+            str: The password as a string, or None if not provided.
+        """
         if file is None:
             return None
         with open(Path() / file, "r") as pw_file:
@@ -58,7 +72,13 @@ class Email_Sender:
         return pw
 
     def _email(self, subject, content=""):
-        """Send an email."""
+        """
+        Send an email using the stored credentials.
+
+        Args:
+            subject (str): Subject line of the email.
+            content (str, optional): Body of the email.
+        """
         email(
             content=content,
             subject=subject,
@@ -80,16 +100,17 @@ def email(
     """
     Sends an email from a gmail account.
 
-    :param content: the message inside the email.
-    :param subject: the subject line.
-    :param sender: the sending email address.
-    :param reciever: the destination email address.
-    :param pw: the gmail password for the sending email address.
-    :param send: will only send an email if this is true.
+    Args:
+        content (str): The message inside the email.
+        subject (str): The subject line.
+        sender (str): The sending email address.
+        reciever (str): The destination email address.
+        pw (str, optional): The gmail password for the sending email address.
+        send (bool): Will only send an email if this is true.
 
-    :return: None
+    Returns:
+        None
     """
-
     if not send:
         return
 
@@ -110,12 +131,28 @@ def email(
 
 
 def timer(time_in_s):
+    """
+    Converts a time in seconds to a string in HH:MM:SS format.
+
+    Args:
+        time_in_s (int or float): Time in seconds.
+    Returns:
+        str: Time formatted as HH:MM:SS.
+    """
     hours, rem = divmod(time_in_s, 3600)
     minutes, seconds = divmod(rem, 60)
     return "{:0>2}:{:0>2}:{:0>2}".format(int(hours), int(minutes), int(seconds))
 
 
 def format_path(path=None):
+    """
+    Formats a path relative to the current file and checks for existence.
+
+    Args:
+        path (str or Path, optional): Path to format and check.
+    Returns:
+        Path or None: Absolute Path object if path exists, else raises FileNotFoundError.
+    """
     if path:
         path = Path(__file__).parent.absolute() / Path(path)
         if os.name != "nt":
@@ -131,43 +168,38 @@ def generate_permutations(list_args: dict) -> list:
     Given a dict of several parameters values which each can take multiple values given as lists,
     return all permutations of the parameters as a list of dicts.
 
-    example input:
-    {
-        "model_type": ["vgg_bn_drop", "resnet20"],
-        "prune_method": ["RandomPruning", "GlobalMagWeight"]
-    }
-
-    example output:
-    [
+    Example input:
         {
-            "model_type": "vgg_bn_drop",
-            "prune_method": "RandomPruning",
-        },
-        {
-            "model_type": "vgg_bn_drop",
-            "prune_method": "GlobalMagWeight",
-        },
-        {
-            "model_type": "resnet20",
-            "prune_method": "RandomPruning",
-        },
-        {
-            "model_type": "resnet20",
-            "prune_method": "GlobalMagWeight",
+            "model_type": ["vgg_bn_drop", "resnet20"],
+            "prune_method": ["RandomPruning", "GlobalMagWeight"]
         }
-    ]
 
-    :param list_args: a dictionary of the parameters formatted as {"parameter_name": [parameter_values]}.
+    Example output:
+        [
+            {"model_type": "vgg_bn_drop", "prune_method": "RandomPruning"},
+            {"model_type": "vgg_bn_drop", "prune_method": "GlobalMagWeight"},
+            {"model_type": "resnet20", "prune_method": "RandomPruning"},
+            {"model_type": "resnet20", "prune_method": "GlobalMagWeight"}
+        ]
 
-    :return: a list of dictionaries, where each dictionary is a permutation of the possible
-        parameter combinations.
+    Args:
+        list_args (dict): Dictionary of parameters as {"parameter_name": [parameter_values]}.
+    Returns:
+        list: List of dictionaries, each a permutation of the possible parameter combinations.
     """
-
     return [dict(zip(list_args, v)) for v in product(*list_args.values())]
 
 
 def find_recent_file(folder, prefix):
-    """Find the most recent file in a folder that starts with a certain prefix."""
+    """
+    Find the most recent file in a folder that starts with a certain prefix.
+
+    Args:
+        folder (str or Path): Folder to search in.
+        prefix (str): Prefix string to match files.
+    Returns:
+        Path or int: Path to the most recent file, or -1 if none found.
+    """
     folder = Path(folder)
     if not folder.exists():
         return -1

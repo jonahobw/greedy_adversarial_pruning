@@ -1,5 +1,7 @@
 """
 Model evaluation utilities.
+
+Provides tools to assess models on clean, pruned, quantized, and adversarial metrics.
 """
 import copy
 import json
@@ -21,10 +23,15 @@ from shrinkbench.metrics import model_size, flops, accuracy, correct
 from shrinkbench.util import OnlineStats
 from experiment_utils import format_path
 
+# Dictionary of supported attacks
 attacks = {"pgd": projected_gradient_descent}
 
 
 class Model_Evaluator(DNNExperiment):
+    """
+    Evaluates a model on clean, pruned, quantized, and adversarial metrics.
+    Inherits from DNNExperiment and provides additional evaluation utilities.
+    """
     default_dl_kwargs = {
         "batch_size": 128,
         "pin_memory": False,
@@ -45,13 +52,30 @@ class Model_Evaluator(DNNExperiment):
         quantized=False,
         surrogate_model_path=None,
     ):
+        """
+        Initialize the Model_Evaluator.
+
+        Args:
+            model_type (str): Model architecture name.
+            model_path (str or Path): Path to the model checkpoint.
+            dataset (str): Dataset name (default: 'CIFAR10').
+            gpu (int, optional): GPU index to use.
+            seed (int, optional): Random seed for reproducibility.
+            dl_kwargs (dict, optional): DataLoader keyword arguments.
+            debug (int, optional): If set, limits number of batches for debugging.
+            attack_method (str, optional): Attack method name (default: 'pgd').
+            attack_kwargs (dict, optional): Parameters for the attack.
+            quantized (bool, optional): Whether the model is quantized.
+            surrogate_model_path (str or Path, optional): Path to surrogate model for quantized attacks.
+        """
         super().__init__(seed=seed)
         if seed:
             self.fix_seed(seed, deterministic=True)
 
-        # set environment variable to be used by shrinkbench
+        # Set environment variable for ShrinkBench dataset path
         os.environ["DATAPATH"] = str(format_path("datasets"))
 
+        # Set DataLoader parameters
         if dl_kwargs:
             self.dl_kwargs = dl_kwargs
         else:
@@ -67,9 +91,11 @@ class Model_Evaluator(DNNExperiment):
         self.model_path = model_path
         self.surrogate_model_path = surrogate_model_path
 
+        # Build data loaders
         self.build_dataloader(dataset=dataset, **self.dl_kwargs)
         self.quantized = quantized
         if not quantized:
+            # Build the main model
             self.build_model(
                 self.model_type,
                 pretrained=False,
@@ -78,6 +104,7 @@ class Model_Evaluator(DNNExperiment):
             )
             self.surrogate_model = None
         else:
+            # For quantized models, build surrogate and load quantized weights
             self.surrogate_model = self.build_model(
                 self.model_type,
                 pretrained=False,
@@ -93,6 +120,9 @@ class Model_Evaluator(DNNExperiment):
         self.attack_kwargs = attack_kwargs
 
     def clean_acc(self):
+        """
+        Computes and stores clean (non-adversarial) top-1 and top-5 accuracy on train and validation sets.
+        """
         res = list(
             accuracy(
                 model=self.model,
@@ -112,7 +142,9 @@ class Model_Evaluator(DNNExperiment):
         self.clean_val_acc5 = res[1]
 
     def prune_metrics(self):
-        """Collect the pruning metrics."""
+        """
+        Collects and stores pruning-related metrics: model size, compression ratio, FLOPS, and file size.
+        """
         # Model Size
         size, size_nz = model_size(self.model)
         self.model_size = size
@@ -120,6 +152,7 @@ class Model_Evaluator(DNNExperiment):
         self.compression_ratio = size / size_nz
         self.model_file_size = pathlib.Path(self.model_path).stat().st_size
 
+        # Get a batch for FLOPS calculation
         x, y = next(iter(self.val_dl))
         if not self.quantized:
             x, y = x.to(self.device), y.to(self.device)
@@ -133,6 +166,12 @@ class Model_Evaluator(DNNExperiment):
         self.theoretical_speedup = ops / ops_nz
 
     def adv_acc(self, train=True):
+        """
+        Computes and stores adversarial accuracy using the specified attack method.
+
+        Args:
+            train (bool): If True, evaluate on training set; else on validation set.
+        """
         assert self.attack_method is not None
         assert self.attack_kwargs is not None
 
@@ -153,7 +192,7 @@ class Model_Evaluator(DNNExperiment):
         adv_acc5 = OnlineStats()
 
         epoch_iter = tqdm(dl)
-        epoch_iter.set_description(f"{attack_name} on {data} dataset")
+        epoch_iter.set_description(f"{self.attack_method} attack on {data} dataset")
 
         for i, (x, y) in enumerate(epoch_iter, start=1):
             if self.debug is not None and i > self.debug:
@@ -194,6 +233,9 @@ class Model_Evaluator(DNNExperiment):
         self.adv_results = results
 
     def print_results(self):
+        """
+        Prints and returns a dictionary of all collected evaluation metrics for the model.
+        """
         metrics = {}
         for name in [
             "clean_train_acc1",
@@ -216,6 +258,15 @@ class Model_Evaluator(DNNExperiment):
         return metrics
 
     def run(self, attack=False):
+        """
+        Runs the full evaluation pipeline: clean accuracy, pruning metrics, and optionally adversarial accuracy.
+
+        Args:
+            attack (bool): Whether to run adversarial evaluation.
+
+        Returns:
+            dict: Dictionary of all collected evaluation metrics.
+        """
         print("Evaluating model ...\nGetting clean accuracy ...")
         self.clean_acc()
         print("Getting pruning metrics ...")
@@ -227,6 +278,7 @@ class Model_Evaluator(DNNExperiment):
 
 
 if __name__ == "__main__":
+    # Example usage for evaluating a model checkpoint
     path = "experiments/experiment_12/googlenet/CIFAR10/googlenet_GreedyPGDGlobalMagGrad_2_compression_5_finetune_iterations/prune/checkpoints/checkpoint-5.pt"
     model_type = "googlenet"
     gpu = 0
