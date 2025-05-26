@@ -1,33 +1,47 @@
+# =============================================================================
+# Experiment Configuration File
+# -----------------------------------------------------------------------------
+# This YAML file defines the configuration for running experiments. It specifies
+# email notification settings, common arguments for all experiments, and a list
+# of experiments to run. Each experiment can specify model type, pruning method,
+# compression ratio, and fine-tuning epochs, among other parameters.
+#
+# Structure:
+#   - email: Email notification settings for experiment progress and results.
+#   - common_args: Arguments applied to all experiments (e.g., dataset, debug).
+#   - experiments: List of experiment configurations (model, pruning, etc.).
+# =============================================================================
+
 ---
+
+# -----------------------------------------------------------------------------
+# Email Notification Settings
+# -----------------------------------------------------------------------------
 email:
-  sender: kundu.lab.keb310@gmail.com
-  pw: email_pw.txt
-  reciever: jobrienweiss@umass.edu
-  # turn off email sending entirely (if email is not configured and/or for debugging)
-  send: true
-  # if true, one email is sent per experiment, with an update as to how many more experiments are left.
-  once_per_experiment: true
+  sender: kundu.lab.keb310@gmail.com      # Email address to send notifications from
+  pw: email_pw.txt                       # Path to file containing sender's email password
+  reciever: jobrienweiss@umass.edu       # Recipient email address
+  send: true                             # Set to false to disable all email notifications
+  once_per_experiment: true              # If true, send one email per experiment (not per stage)
 
 
-# these are arguments which will be applied to each experiment defined in the section below 'experiments'
+# -----------------------------------------------------------------------------
+# Common Arguments (applied to all experiments below)
+# -----------------------------------------------------------------------------
 common_args:
-  experiment_number: 4
-  dataset: CIFAR10
-  gpu: null
+  experiment_number: 4                    # Identifier for this batch of experiments
+  dataset: CIFAR10                        # Dataset to use (e.g., CIFAR10, CIFAR100)
+  gpu: null                               # GPU index to use (null for CPU)
   # debug is either null/0 (off) or an integer representing the number of training batches to run.
   # there will only be 1 epoch of training with <debug> number of batches
-  debug: 1
-  # if false, then each experiment will send an email when it starts and ends.  If
-  # true, then each experiment will additionally send an email when it ends training,
-  # pruning, fine-tuning, quantizing, and/or attacking
-  email_verbose: false
-  save_one_checkpoint: true
-  attack_method: pgd
+  debug: 1                                
+  email_verbose: false                    # If true, send emails at each stage (train, prune, quantize, finetune, attack.), else only start/end
+  save_one_checkpoint: true               # If true, save only one checkpoint per experiment
+  attack_method: pgd                      # Adversarial attack method (e.g., 'pgd')
   attack_kwargs:
-    eps: 0.031372549  # 8/255
-    eps_iter: 0.0078431  # 2/255
-    # boolean, whether to run attack on training or test set
-    train: true
+    eps: 0.031372549                      # Attack epsilon (e.g., 8/255 for PGD)
+    eps_iter: 0.0078431                   # Attack step size (e.g., 2/255 for PGD)
+    train: true                           # If true, run attack on training set; else on test set
 
 
 experiments:
@@ -36,9 +50,13 @@ experiments:
   #                       vgg_bn_drop, vgg_bn_drop_100}.
   #
   # note that the resnets and vgg_bn_drop are only for CIFAR10, and vgg_bn_drop_100 is only for CIFAR100.
+  # prune_method: One of {RandomPruning, GlobalMagWeight, LayerMagWeight,
+  #                       GlobalMagGrad, LayerMagGrad, GlobalMagAct, LayerMagAct, 
+  #                       GreedyPGDGlobalMagGrad, GreedyPGDGlobalMagGrad_param, GreedyPGDLayerMagGrad}
+  # prune_compression: Compression ratio (e.g., 2 = 50% pruning)
+  # finetune_epochs: Number of epochs for fine-tuning after pruning
+
 - model_type: resnet20
-  # one of {RandomPruning, GlobalMagWeight, LayerMagWeight, GlobalMagGrad, LayerMagGrad, GlobalMagAct,
-  #         LayerMagAct}
   prune_method: RandomPruning
   prune_compression: 2
   finetune_epochs: 40
