@@ -102,7 +102,7 @@ class Experiment:
         self.experiment_number = experiment_number
         self.dataset = dataset
         self.model_type = model_type
-        self.model_path = format_path(model_path)
+        self.model_path = format_path(model_path, directory="experiments")
         self.resume = resume
         self.best_model_metric = best_model_metric
         self.quantization = quantization
@@ -123,7 +123,7 @@ class Experiment:
             ), "Transfer model must be provided when only_attack is set to True."
         self.save_one_checkpoint = save_one_checkpoint
         self.seed = seed
-        self.transfer_attack_model = format_path(transfer_attack_model)
+        self.transfer_attack_model = format_path(transfer_attack_model, directory="experiments")
 
         # Set up experiment folder structure and name
         self.paths, self.name = self.generate_paths()

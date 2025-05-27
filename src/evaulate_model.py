@@ -3,22 +3,16 @@ Model evaluation utilities.
 
 Provides tools to assess models on clean, pruned, quantized, and adversarial metrics.
 """
-import copy
 import json
-import pathlib
+from pathlib import Path
 import os
 
-import numpy as np
 from tqdm import tqdm
-import torch
-import torchvision.models
 from cleverhans.torch.attacks.projected_gradient_descent import (
     projected_gradient_descent,
 )
 
 from shrinkbench.experiment import QuantizeExperiment, DNNExperiment
-from shrinkbench import models
-from shrinkbench.models.head import mark_classifier
 from shrinkbench.metrics import model_size, flops, accuracy, correct
 from shrinkbench.util import OnlineStats
 from experiment_utils import format_path
@@ -81,7 +75,7 @@ class Model_Evaluator(DNNExperiment):
         else:
             self.dl_kwargs = self.default_dl_kwargs
 
-        self.path = format_path(model_path)
+        self.path = format_path(model_path, directory="experiments")
         self.resume = self.path
 
         self.gpu = gpu
@@ -150,7 +144,7 @@ class Model_Evaluator(DNNExperiment):
         self.model_size = size
         self.model_size_nz = size_nz
         self.compression_ratio = size / size_nz
-        self.model_file_size = pathlib.Path(self.model_path).stat().st_size
+        self.model_file_size = Path(self.model_path).stat().st_size
 
         # Get a batch for FLOPS calculation
         x, y = next(iter(self.val_dl))
@@ -275,14 +269,3 @@ class Model_Evaluator(DNNExperiment):
             print("Getting adversarial accuracy ...")
             self.adv_acc()
         return self.print_results()
-
-
-if __name__ == "__main__":
-    # Example usage for evaluating a model checkpoint
-    path = "experiments/experiment_12/googlenet/CIFAR10/googlenet_GreedyPGDGlobalMagGrad_2_compression_5_finetune_iterations/prune/checkpoints/checkpoint-5.pt"
-    model_type = "googlenet"
-    gpu = 0
-    evaluator = Model_Evaluator(
-        model_type=model_type, model_path=pathlib.Path(path), gpu=gpu
-    )
-    evaluator.evaluate()

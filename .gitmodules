@@ -1,0 +1,3 @@
+[submodule "src/shrinkbench"]
+	path = src/shrinkbench
+	url = https://github.com/jonahobw/shrinkbench.git

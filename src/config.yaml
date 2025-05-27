@@ -19,9 +19,8 @@
 # -----------------------------------------------------------------------------
 email:
   sender: kundu.lab.keb310@gmail.com      # Email address to send notifications from
-  pw: email_pw.txt                       # Path to file containing sender's email password
   reciever: jobrienweiss@umass.edu       # Recipient email address
-  send: true                             # Set to false to disable all email notifications
+  send: false                             # Set to false to disable all email notifications
   once_per_experiment: true              # If true, send one email per experiment (not per stage)
 
 
@@ -29,7 +28,7 @@ email:
 # Common Arguments (applied to all experiments below)
 # -----------------------------------------------------------------------------
 common_args:
-  experiment_number: 4                    # Identifier for this batch of experiments
+  experiment_number: 0                    # Identifier for this batch of experiments
   dataset: CIFAR10                        # Dataset to use (e.g., CIFAR10, CIFAR100)
   gpu: null                               # GPU index to use (null for CPU)
   # debug is either null/0 (off) or an integer representing the number of training batches to run.
@@ -57,109 +56,6 @@ experiments:
   # finetune_epochs: Number of epochs for fine-tuning after pruning
 
 - model_type: resnet20
-  prune_method: RandomPruning
-  prune_compression: 2
-  finetune_epochs: 40
-
-- model_type: googlenet
-  prune_method: RandomPruning
-  prune_compression: 2
-  finetune_epochs: 40
-
-- model_type: resnet20
-  prune_method: RandomPruning
-  prune_compression: 2
-  finetune_epochs: 40
-
-- model_type: vgg_bn_drop
-  prune_method: RandomPruning
-  prune_compression: 2
-  finetune_epochs: 40
-
-# -------------------------------------------------------------------------
-
-- model_type: mobilenet_v2
-  prune_method: GlobalMagWeight
-  prune_compression: 2
-  finetune_epochs: 40
-
-- model_type: googlenet
-  prune_method: GlobalMagWeight
-  prune_compression: 2
-  finetune_epochs: 40
-
-- model_type: resnet20
-  prune_method: GlobalMagWeight
-  prune_compression: 2
-  finetune_epochs: 40
-
-- model_type: vgg_bn_drop
-  prune_method: GlobalMagWeight
-  prune_compression: 2
-  finetune_epochs: 40
-
-# -------------------------------------------------------------------------
-
-- model_type: mobilenet_v2
-  prune_method: LayerMagWeight
-  prune_compression: 2
-  finetune_epochs: 40
-
-- model_type: googlenet
-  prune_method: LayerMagWeight
-  prune_compression: 2
-  finetune_epochs: 40
-
-- model_type: resnet20
-  prune_method: LayerMagWeight
-  prune_compression: 2
-  finetune_epochs: 40
-
-- model_type: vgg_bn_drop
-  prune_method: LayerMagWeight
-  prune_compression: 2
-  finetune_epochs: 40
-
-# -------------------------------------------------------------------------
-
-- model_type: mobilenet_v2
-  prune_method: GlobalMagGrad
-  prune_compression: 2
-  finetune_epochs: 40
-
-- model_type: googlenet
-  prune_method: GlobalMagGrad
-  prune_compression: 2
-  finetune_epochs: 40
-
-- model_type: resnet20
-  prune_method: GlobalMagGrad
-  prune_compression: 2
-  finetune_epochs: 40
-
-- model_type: vgg_bn_drop
-  prune_method: GlobalMagGrad
-  prune_compression: 2
-  finetune_epochs: 40
-
-# -------------------------------------------------------------------------
-
-- model_type: mobilenet_v2
-  prune_method: LayerMagGrad
-  prune_compression: 2
-  finetune_epochs: 40
-
-- model_type: googlenet
-  prune_method: LayerMagGrad
-  prune_compression: 2
-  finetune_epochs: 40
-
-- model_type: resnet20
-  prune_method: LayerMagGrad
-  prune_compression: 2
-  finetune_epochs: 40
-
-- model_type: vgg_bn_drop
-  prune_method: LayerMagGrad
-  prune_compression: 2
-  finetune_epochs: 40
+  prune_method: [RandomPruning, GreedyPGDGlobalMagGrad]
+  prune_compression: [2, 4]
+  finetune_epochs: 1

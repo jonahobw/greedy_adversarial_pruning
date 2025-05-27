@@ -27,7 +27,6 @@ class Email_Sender:
         self,
         sender: str = None,
         reciever: str = None,
-        pw: str = None,
         send: bool = True,
         **kwargs,
     ) -> None:
@@ -42,32 +41,31 @@ class Email_Sender:
         """
         self.sender = sender
         self.reciever = reciever
-        self.pw = self.retrieve_pw(pw)
+        self.pw = self.retrieve_pw()
         self.send = send
         if self.send is not None:
             logger.info("Email settings: send set to %s", send)
         # Dummy function in case an argument is not provided
-        if None in (sender, reciever, pw):
+        if None in (sender, reciever):
             logger.warning(
-                "At least one of email sender, reciever, or pw was not"
+                "At least one of email sender or reciever was not"
                 "specified, will not send any emails."
             )
             self.email = lambda subject, content: 0
         else:
             self.email = self._email
 
-    def retrieve_pw(self, file: str = None) -> str:
+    def retrieve_pw(self) -> str:
         """
-        Retrieves the gmail password from a file.
+        Retrieves the gmail password from a "email_pw.txt" file.
 
-        Args:
-            file (str, optional): Path to the file containing the password.
         Returns:
             str: The password as a string, or None if not provided.
+
+        Raises:
+            FileNotFoundError: If the "email_pw.txt" file is not found.
         """
-        if file is None:
-            return None
-        with open(Path() / file, "r") as pw_file:
+        with open(Path() / "src" / "email_pw.txt", "r") as pw_file:
             pw = pw_file.read()
         return pw
 
@@ -144,17 +142,21 @@ def timer(time_in_s):
     return "{:0>2}:{:0>2}:{:0>2}".format(int(hours), int(minutes), int(seconds))
 
 
-def format_path(path=None):
+def format_path(path=None, directory=None):
     """
-    Formats a path relative to the current file and checks for existence.
+    Formats a path relative to the repository root and checks for existence.
 
     Args:
         path (str or Path, optional): Path to format and check.
+        directory (str, optional): Directory to format path relative to.
     Returns:
         Path or None: Absolute Path object if path exists, else raises FileNotFoundError.
     """
     if path:
-        path = Path(__file__).parent.absolute() / Path(path)
+        repo_root = Path(__file__).parent.parent.absolute()
+        if directory:
+            repo_root = repo_root / directory
+        path = repo_root / path
         if os.name != "nt":
             path = Path(path.as_posix())
         if not path.exists():

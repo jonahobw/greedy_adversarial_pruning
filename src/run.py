@@ -28,9 +28,9 @@ def run_experiments(filename: str = None) -> None:
     Args:
         filename (str, optional): Path to the YAML config file. Defaults to 'config.yaml' in cwd.
     """
-    path = Path.cwd() / "config.yaml"
+    path = Path.cwd() / "src" / "config.yaml"
     if filename:
-        path = Path.cwd() / filename
+        path = Path.cwd() / "src" / filename
 
     logger.info(f"Reading config file {path}")
 

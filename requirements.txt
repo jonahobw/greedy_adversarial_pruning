@@ -1,15 +1,14 @@
-numpy
+numpy<2
 matplotlib
 pandas
-torch
-torchvision
-tqdm
+torch==1.12.1
+torchvision==0.13.1
+tqdm==4.64.1
 certifi
 pyyaml
 scipy
-cleverhans
-tqdm
 certifi
+cleverhans==4.0.0
 
 # install all of these with
 # pip install -r requirements.txt
@@ -17,7 +16,7 @@ certifi
 # to "install" shrinkbench, go to ~/git and run
 # git clone https://github.com/jonahobw/shrinkbench.git
 # conda activate <environment_name>
-# conda env config vars set PYTHONPATH="<path to parent folder of shrinkbench>"
+# conda env config vars set PYTHONPATH="src/shrinkbench" "<path to parent folder of shrinkbench>"
 # conda activate <environment_name>
 # you can check that this worked with
 # echo $PYTHONPATH
