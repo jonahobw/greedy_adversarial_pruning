@@ -8,6 +8,16 @@ certifi
 pyyaml
 scipy
 cleverhans
+tqdm
+certifi
 
 # install all of these with
 # pip install -r requirements.txt
+
+# to "install" shrinkbench, go to ~/git and run
+# git clone https://github.com/jonahobw/shrinkbench.git
+# conda activate <environment_name>
+# conda env config vars set PYTHONPATH="<path to parent folder of shrinkbench>"
+# conda activate <environment_name>
+# you can check that this worked with
+# echo $PYTHONPATH
