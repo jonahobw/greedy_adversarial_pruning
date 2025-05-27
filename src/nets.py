@@ -142,15 +142,3 @@ def get_lr_schedule(
     if method == "fixed":
         return lambda x: intial_rate
     return lr_schedule
-
-
-if __name__ == "__main__":
-    # Example usage for finding the best model checkpoint
-    logs_path = (
-        r"C:\Users\Jonah\Desktop\Jonah\0Grad_1\Research\code\aicas\experiments\experiment_0"
-        r"\googlenet\CIFAR10\googlenet_GlobalMagGrad_2_compression_40_finetune_iterations"
-        r"\20211101-111936-I0Y6-8bd05137846f1a27442e8665fcd4d428"
-    )
-
-    a = best_model(logs_path)
-    print(a)
